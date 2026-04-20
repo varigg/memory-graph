@@ -6,6 +6,26 @@ SQLite, supports FTS5 and semantic retrieval, and exposes a small web UI.
 
 ## Quick Start
 
+### Using uv (recommended)
+
+```bash
+# 1) Clone and enter repo
+git clone <repo-url> memory-graph
+cd memory-graph
+
+# 2) Sync dependencies (creates venv automatically)
+uv sync
+
+# 3) Configure environment
+export MEMORY_DB_PATH=/path/to/memory.db
+export OPENAI_API_KEY=sk-...  # or GOOGLE_API_KEY=AIza...
+
+# 4) Run server
+uv run python api_server.py
+```
+
+### Using pip + venv (alternative)
+
 ```bash
 # 1) Clone and enter repo
 git clone <repo-url> memory-graph
@@ -13,31 +33,66 @@ cd memory-graph
 
 # 2) Create and activate virtual environment
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # or: .\\venv\\Scripts\\activate (Windows)
 
 # 3) Install dependencies
 pip install -r requirements.txt
 
 # 4) Configure environment
 export MEMORY_DB_PATH=/path/to/memory.db
-
-# Optional runtime overrides
-export MEMORY_HOST=0.0.0.0
-export MEMORY_PORT=7777
-export MEMORY_MAX_CONTENT_LENGTH=1048576
-export MEMORY_CORS_ORIGINS='http://localhost:3000,http://localhost:7777'
-
-# Embeddings provider (set one)
-export OPENAI_API_KEY=sk-...
-# or
-export GOOGLE_API_KEY=AIza...
+export OPENAI_API_KEY=sk-...  # or GOOGLE_API_KEY=AIza...
 
 # 5) Run server
 python api_server.py
 ```
 
-Server: http://localhost:7777
-UI: http://localhost:7777/graph
+### Configuration
+
+**Environment variables** (see `config.py`):
+
+- `MEMORY_DB_PATH` — database path (fallback: `~/.claude/memory.db`)
+- `MEMORY_HOST` — bind address (default: `0.0.0.0`)
+- `MEMORY_PORT` — port (default: `7777`)
+- `MEMORY_MAX_CONTENT_LENGTH` — request size limit (default: 1 MB)
+- `MEMORY_CORS_ORIGINS` — CORS allowed origins (default: `*`)
+- `OPENAI_API_KEY` or `GOOGLE_API_KEY` — embeddings provider
+
+**Server endpoints:**
+
+- API: http://localhost:7777
+- UI: http://localhost:7777/graph
+- Health check: http://localhost:7777/health
+
+## Development
+
+### Running Tests
+
+```bash
+# Run all tests
+uv run pytest
+
+# Run only unit tests (skip integration/e2e)
+uv run pytest -m "not e2e"
+
+# Run e2e tests (requires embeddings API key)
+uv run pytest -m e2e -v
+
+# Run with coverage
+uv run pytest --cov=. --cov-report=html
+```
+
+### Linting and Formatting
+
+```bash
+# Check code style with ruff
+uv run ruff check .
+
+# Auto-fix issues
+uv run ruff check . --fix
+
+# Format (ruff includes formatter)
+uv run ruff format .
+```
 
 ## Configuration
 
