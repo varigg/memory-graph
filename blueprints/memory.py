@@ -2,8 +2,10 @@ from flask import Blueprint, jsonify, request
 
 from db_operations import (
     fts_search_memories,
+    fts_search_memories_scoped,
     insert_entity,
     insert_memory,
+    list_memories_scoped,
     promote_memory_to_shared,
 )
 from db_utils import get_db
@@ -27,6 +29,22 @@ def _parse_limit_offset():
     if offset < 0:
         return None, None, jsonify({"error": "offset must be a non-negative integer"}), 400
     return min(limit, _MAX_LIMIT), offset, None, None
+
+
+def _parse_scope_flags():
+    """Parse shared_only and private_only flags."""
+    shared_only_str = request.args.get("shared_only", "false").lower()
+    private_only_str = request.args.get("private_only", "false").lower()
+
+    shared_only = shared_only_str == "true"
+    private_only = private_only_str == "true"
+
+    if shared_only and private_only:
+        return None, None, jsonify(
+            {"error": "Cannot specify both shared_only and private_only"}
+        ), 400
+
+    return shared_only, private_only, None, None
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +102,22 @@ def list_memories():
     limit, offset, err_resp, err_status = _parse_limit_offset()
     if err_resp is not None:
         return err_resp, err_status
+
+    agent_id = request.args.get("agent_id")
+    shared_only, private_only, err_resp, err_status = _parse_scope_flags()
+    if err_resp is not None:
+        return err_resp, err_status
+
     db = get_db()
+
+    # If agent_id is provided, use scoped listing
+    if agent_id:
+        rows = list_memories_scoped(
+            db, agent_id, limit, offset, shared_only, private_only
+        )
+        return jsonify(rows)
+
+    # Legacy behavior: no scoping if agent_id not provided
     rows = db.execute(
         "SELECT id, name, type, content, description, timestamp, confidence FROM memories"
         " LIMIT ? OFFSET ?",
@@ -104,15 +137,32 @@ def recall_memory():
     limit, offset, err_resp, err_status = _parse_limit_offset()
     if err_resp is not None:
         return err_resp, err_status
+
+    agent_id = request.args.get("agent_id")
+    shared_only, private_only, err_resp, err_status = _parse_scope_flags()
+    if err_resp is not None:
+        return err_resp, err_status
+
     db = get_db()
     try:
         safe_topic = cleaned_topic.replace('"', "")
-        results = fts_search_memories(
-            db,
-            f'"{safe_topic}"',
-            limit=limit,
-            offset=offset,
-        )
+        if agent_id:
+            results = fts_search_memories_scoped(
+                db,
+                f'"{safe_topic}"',
+                agent_id,
+                limit=limit,
+                offset=offset,
+                shared_only=shared_only,
+                private_only=private_only,
+            )
+        else:
+            results = fts_search_memories(
+                db,
+                f'"{safe_topic}"',
+                limit=limit,
+                offset=offset,
+            )
     except Exception:
         results = []
     return jsonify(results)
@@ -129,15 +179,32 @@ def search_memory():
     limit, offset, err_resp, err_status = _parse_limit_offset()
     if err_resp is not None:
         return err_resp, err_status
+
+    agent_id = request.args.get("agent_id")
+    shared_only, private_only, err_resp, err_status = _parse_scope_flags()
+    if err_resp is not None:
+        return err_resp, err_status
+
     db = get_db()
     try:
         safe_q = cleaned_q.replace('"', "")
-        results = fts_search_memories(
-            db,
-            f'"{safe_q}"',
-            limit=limit,
-            offset=offset,
-        )
+        if agent_id:
+            results = fts_search_memories_scoped(
+                db,
+                f'"{safe_q}"',
+                agent_id,
+                limit=limit,
+                offset=offset,
+                shared_only=shared_only,
+                private_only=private_only,
+            )
+        else:
+            results = fts_search_memories(
+                db,
+                f'"{safe_q}"',
+                limit=limit,
+                offset=offset,
+            )
     except Exception:
         results = []
     return jsonify(results)

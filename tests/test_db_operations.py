@@ -487,3 +487,77 @@ class TestSemanticSearch:
 
         results = ops.semantic_search(db, [1.0, 0.0], top_k=5)
         assert any(r["text"] == "text_0" for r in results)
+
+
+# ---------------------------------------------------------------------------
+# Visibility/ownership scoping (Phase 3A PR-3)
+# ---------------------------------------------------------------------------
+
+class TestMemoryVisibilityScoping:
+    def test_list_memories_scoped_default_includes_shared_and_own_private(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        # Create shared and private memories
+        ops.insert_memory(
+            db, "shared", "note", "shared-content", "", visibility="shared", owner_agent_id="agent-alpha"
+        )
+        ops.insert_memory(
+            db, "private-alpha", "note", "private-alpha-content", "", visibility="private", owner_agent_id="agent-alpha"
+        )
+        ops.insert_memory(
+            db, "private-beta", "note", "private-beta-content", "", visibility="private", owner_agent_id="agent-beta"
+        )
+
+        # List as agent-alpha with default scope
+        results = ops.list_memories_scoped(db, "agent-alpha", limit=100)
+        names = {r["name"] for r in results}
+        assert "shared" in names
+        assert "private-alpha" in names
+        assert "private-beta" not in names
+
+    def test_list_memories_scoped_shared_only(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        ops.insert_memory(db, "shared", "note", "content", "", visibility="shared", owner_agent_id="agent-alpha")
+        ops.insert_memory(db, "private", "note", "content", "", visibility="private", owner_agent_id="agent-alpha")
+
+        results = ops.list_memories_scoped(db, "agent-alpha", limit=100, shared_only=True)
+        names = {r["name"] for r in results}
+        assert "shared" in names
+        assert "private" not in names
+
+    def test_list_memories_scoped_private_only(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        ops.insert_memory(db, "shared", "note", "content", "", visibility="shared", owner_agent_id="agent-alpha")
+        ops.insert_memory(db, "private", "note", "content", "", visibility="private", owner_agent_id="agent-alpha")
+
+        results = ops.list_memories_scoped(db, "agent-alpha", limit=100, private_only=True)
+        names = {r["name"] for r in results}
+        assert "private" in names
+        assert "shared" not in names
+
+    def test_fts_search_memories_scoped(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        ops.insert_memory(
+            db, "shared-search", "note", "deployment token", "", visibility="shared", owner_agent_id="agent-alpha"
+        )
+        ops.insert_memory(
+            db, "private-search", "note", "deployment marker", "", visibility="private", owner_agent_id="agent-alpha"
+        )
+        ops.insert_memory(
+            db, "private-beta", "note", "deployment secret", "", visibility="private", owner_agent_id="agent-beta"
+        )
+
+        # Search as agent-alpha should find shared + own private
+        results = ops.fts_search_memories_scoped(db, '"deployment"', "agent-alpha", limit=100)
+        names = {r["name"] for r in results}
+        assert "shared-search" in names or "private-search" in names
+        assert "private-beta" not in names
+
+    def test_scope_predicate_rejects_conflicting_flags(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        with pytest.raises(ValueError, match="Cannot combine"):
+            ops._build_scope_predicate("agent-alpha", shared_only=True, private_only=True)

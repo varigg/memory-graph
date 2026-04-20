@@ -51,6 +51,92 @@ def fts_search_memories(
 
 
 # ---------------------------------------------------------------------------
+# Visibility/ownership scoping
+# ---------------------------------------------------------------------------
+
+def _build_scope_predicate(agent_id, shared_only=False, private_only=False):
+    """Build visibility scope SQL predicate.
+
+    Returns tuple: (predicate_string, bind_params)
+    where predicate_string is ready for use in WHERE clause.
+    """
+    if shared_only and private_only:
+        raise ValueError("Cannot combine shared_only and private_only")
+
+    if shared_only:
+        return "(visibility = 'shared')", []
+    if private_only:
+        return "(visibility = 'private' AND owner_agent_id = ?)", [agent_id]
+
+    # Default: shared + agent's private
+    return (
+        "(visibility = 'shared' OR (visibility = 'private' AND owner_agent_id = ?))",
+        [agent_id],
+    )
+
+
+def list_memories_scoped(
+    db: sqlite3.Connection,
+    agent_id: str,
+    limit: int = 20,
+    offset: int = 0,
+    shared_only: bool = False,
+    private_only: bool = False,
+) -> list:
+    """List memories with visibility scoping applied."""
+    predicate, bind_params = _build_scope_predicate(agent_id, shared_only, private_only)
+    query_params = bind_params + [limit, offset]
+
+    rows = db.execute(
+        f"SELECT id, name, type, content, description, timestamp, confidence, "
+        f"owner_agent_id, visibility FROM memories "
+        f"WHERE {predicate} "
+        f"LIMIT ? OFFSET ?",
+        query_params,
+    ).fetchall()
+    return [
+        {
+            "id": r[0],
+            "name": r[1],
+            "type": r[2],
+            "content": r[3],
+            "description": r[4],
+            "timestamp": r[5],
+            "confidence": r[6],
+            "owner_agent_id": r[7],
+            "visibility": r[8],
+        }
+        for r in rows
+    ]
+
+
+def fts_search_memories_scoped(
+    db: sqlite3.Connection,
+    query: str,
+    agent_id: str,
+    limit: int = 20,
+    offset: int = 0,
+    shared_only: bool = False,
+    private_only: bool = False,
+) -> list:
+    """FTS search on memories with visibility scoping."""
+    predicate, bind_params = _build_scope_predicate(agent_id, shared_only, private_only)
+
+    # Build parameter list in correct order: scope params, query, limit, offset
+    full_query_params = bind_params + [query, limit, offset]
+    rows = db.execute(
+        f"SELECT m.name, m.content, m.description, m.id "
+        f"FROM memories m "
+        f"INNER JOIN fts_memories f ON f.memory_id = m.id "
+        f"WHERE {predicate} "
+        f"AND f.fts_memories MATCH ? "
+        f"LIMIT ? OFFSET ?",
+        full_query_params,
+    ).fetchall()
+    return [{"name": r[0], "content": r[1], "description": r[2], "memory_id": r[3]} for r in rows]
+
+
+# ---------------------------------------------------------------------------
 # Insert helpers
 # ---------------------------------------------------------------------------
 

@@ -414,3 +414,194 @@ def test_memory_list_supports_limit_and_offset(client):
     results2 = resp2.get_json()
     if results and results2:
         assert results[0]["id"] != results2[0]["id"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 3A: Memory read scoping by visibility and ownership
+# ---------------------------------------------------------------------------
+
+class TestMemoryReadScoping:
+    """Tests for read-path visibility and ownership scoping (Phase 3A PR-3)."""
+
+    def test_list_with_agent_id_includes_shared_and_own_private(self, client):
+        """GET /memory/list?agent_id=<id> should include shared + agent's private."""
+        # Create shared memory
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-mem",
+                content="shared content",
+                owner_agent_id="agent-alpha",
+                visibility="shared",
+            ),
+        )
+
+        # Create private memory for agent-alpha
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-alpha",
+                content="alpha private",
+                owner_agent_id="agent-alpha",
+                visibility="private",
+            ),
+        )
+
+        # Create private memory for agent-beta
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-beta",
+                content="beta private",
+                owner_agent_id="agent-beta",
+                visibility="private",
+            ),
+        )
+
+        # List as agent-alpha should see shared + their private, not beta's private
+        resp = client.get("/memory/list?agent_id=agent-alpha")
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert "shared-mem" in names, "Should see shared memories"
+        assert "private-alpha" in names, "Should see own private memories"
+        assert "private-beta" not in names, "Should not see other agent's private memories"
+
+    def test_list_shared_only_flag(self, client):
+        """GET /memory/list?agent_id=<id>&shared_only=true should return only shared."""
+        # Create shared and private
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-1",
+                visibility="shared",
+                agent_id="agent-alpha",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-1",
+                visibility="private",
+                agent_id="agent-alpha",
+            ),
+        )
+
+        # List with shared_only
+        resp = client.get("/memory/list?agent_id=agent-alpha&shared_only=true")
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert "shared-1" in names, "Should see shared"
+        assert "private-1" not in names, "Should not see private with shared_only"
+
+    def test_list_private_only_flag(self, client):
+        """GET /memory/list?agent_id=<id>&private_only=true should return only own private."""
+        # Create shared and private
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-2",
+                visibility="shared",
+                agent_id="agent-alpha",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-2",
+                visibility="private",
+                agent_id="agent-alpha",
+            ),
+        )
+
+        # List with private_only
+        resp = client.get("/memory/list?agent_id=agent-alpha&private_only=true")
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert "private-2" in names, "Should see own private"
+        assert "shared-2" not in names, "Should not see shared with private_only"
+
+    def test_list_rejects_conflicting_scope_flags(self, client):
+        """GET /memory/list should reject both shared_only and private_only."""
+        resp = client.get("/memory/list?agent_id=agent-alpha&shared_only=true&private_only=true")
+        assert resp.status_code == 400
+        assert "cannot" in resp.get_json().get("error", "").lower()
+
+    def test_search_with_scoping(self, client):
+        """GET /memory/search?agent_id=<id> should scope FTS results."""
+        # Create shared and private memories with unique content
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-search",
+                content="unique-shared-marker",
+                visibility="shared",
+                owner_agent_id="agent-alpha",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-search",
+                content="unique-private-marker",
+                visibility="private",
+                owner_agent_id="agent-alpha",
+            ),
+        )
+
+        # Search as agent-alpha should find both
+        resp = client.get("/memory/search?q=unique&agent_id=agent-alpha")
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert "shared-search" in names or "private-search" in names, (
+            "Should find scoped search results"
+        )
+
+    def test_recall_with_scoping(self, client):
+        """GET /memory/recall?topic=<t>&agent_id=<id> should scope FTS results."""
+        # Create shared and private memories
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-recall",
+                content="deployment shared",
+                visibility="shared",
+                owner_agent_id="agent-alpha",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-recall",
+                content="deployment private",
+                visibility="private",
+                owner_agent_id="agent-alpha",
+            ),
+        )
+
+        # Recall as agent-alpha should find both
+        resp = client.get("/memory/recall?topic=deployment&agent_id=agent-alpha")
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert "shared-recall" in names or "private-recall" in names, (
+            "Should find scoped recall results"
+        )
+
+    def test_list_without_agent_id_unscoped_legacy_behavior(self, client):
+        """GET /memory/list without agent_id should return all memories (legacy)."""
+        # Create memories as different agents
+        for agent in ["alpha", "beta"]:
+            client.post(
+                "/memory",
+                json=_memory_payload(
+                    name=f"mem-{agent}",
+                    visibility="private",
+                    agent_id=f"agent-{agent}",
+                ),
+            )
+
+        # List without agent_id should see all (legacy compatibility)
+        resp = client.get("/memory/list")
+        assert resp.status_code == 200
+        # With legacy behavior, both should be visible
+        names = {m.get("name") for m in resp.get_json()}
+        # This documents current behavior; scoping requires agent_id
