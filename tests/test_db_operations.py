@@ -654,3 +654,53 @@ class TestMemoryVisibilityScoping:
         transitioned, err = ops.transition_memory_status(db, mem_id, "agent-alpha", "archived")
         assert transitioned is None
         assert err == "invalid_transition"
+
+    def test_list_memories_scoped_orders_shared_before_private(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        ops.insert_memory(
+            db, "private-first", "note", "ranking", "", confidence=0.9,
+            visibility="private", owner_agent_id="agent-alpha"
+        )
+        ops.insert_memory(
+            db, "shared-second", "note", "ranking", "", confidence=0.1,
+            visibility="shared", owner_agent_id="agent-alpha"
+        )
+
+        results = ops.list_memories_scoped(db, "agent-alpha", limit=100)
+        names = [r["name"] for r in results]
+        assert names[:2] == ["shared-second", "private-first"]
+
+    def test_fts_search_memories_scoped_orders_by_confidence_then_recency(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        older_id = ops.insert_memory(
+            db, "older-high", "note", "rank-token", "", confidence=0.9,
+            visibility="shared", owner_agent_id="agent-alpha"
+        )
+        newer_low_id = ops.insert_memory(
+            db, "newer-low", "note", "rank-token", "", confidence=0.5,
+            visibility="shared", owner_agent_id="agent-alpha"
+        )
+        newer_high_id = ops.insert_memory(
+            db, "newer-high", "note", "rank-token", "", confidence=0.9,
+            visibility="shared", owner_agent_id="agent-alpha"
+        )
+
+        db.execute(
+            "UPDATE memories SET updated_at = '2024-01-01 00:00:00' WHERE id = ?",
+            (older_id,),
+        )
+        db.execute(
+            "UPDATE memories SET updated_at = '2024-01-03 00:00:00' WHERE id = ?",
+            (newer_low_id,),
+        )
+        db.execute(
+            "UPDATE memories SET updated_at = '2024-01-04 00:00:00' WHERE id = ?",
+            (newer_high_id,),
+        )
+        db.commit()
+
+        results = ops.fts_search_memories_scoped(db, '"rank-token"', "agent-alpha", limit=100)
+        names = [r["name"] for r in results]
+        assert names[:3] == ["newer-high", "older-high", "newer-low"]

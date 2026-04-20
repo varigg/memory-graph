@@ -740,6 +740,29 @@ class TestMemoryReadScoping:
         names = {m.get("name") for m in resp.get_json()}
         assert names == {"shared-beta"}
 
+    def test_list_prefers_shared_memories_before_private(self, client):
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-ranked",
+                owner_agent_id="agent-alpha",
+                visibility="private",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-ranked",
+                owner_agent_id="agent-alpha",
+                visibility="shared",
+            ),
+        )
+
+        resp = client.get("/memory/list?agent_id=agent-alpha")
+        assert resp.status_code == 200
+        names = [m.get("name") for m in resp.get_json()[:2]]
+        assert names == ["shared-ranked", "private-ranked"]
+
     def test_search_filters_by_owner_without_agent_id(self, client):
         client.post(
             "/memory",

@@ -148,6 +148,12 @@ Status behavior:
 - default read filter is `status=active`
 - use `status=archived` or `status=invalidated` to inspect lifecycle states
 
+Ranking behavior for memory retrieval:
+
+- shared memories are preferred ahead of private ones
+- higher-confidence memories rank ahead of lower-confidence ones
+- newer memories break ties using `updated_at` / `timestamp`
+
 ### Entities
 
 - `POST /entity`
@@ -210,8 +216,8 @@ Phase 3 starts with multi-agent memory usability for local trusted agents
   - Promote flow: private memory can be promoted to shared
   - API and schema additions for visibility filtering now active
 - **3B Retrieval Quality + Lifecycle (partially implemented, partially required)**
-  - Implemented: visibility/owner/status filters and archive/invalidate lifecycle operations
-  - Planned: confidence/recency ranking enhancements and merge/supersede operations
+  - Implemented: visibility/owner/status filters, archive/invalidate lifecycle operations, and memory ranking hints
+  - Planned: merge/supersede operations
 - **3C Scale + Ops (planned, mostly optional/defer for current scale)**
   - Async enrichment pipeline and queueing
   - Cursor pagination for larger recall workloads
@@ -236,7 +242,7 @@ uv run pytest -q --tb=no
 
 Current status:
 
-- `370 passed, 14 skipped`
+- `373 passed, 14 skipped`
 
 ## Project Layout
 

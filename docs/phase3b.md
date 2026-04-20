@@ -8,11 +8,15 @@ Improve utility of retrieved context and keep memory quality high over time.
 
 ### 1) Retrieval Quality
 
-- Add ranking inputs beyond lexical/semantic match:
-  - visibility (`shared` preferred when cross-agent utility is likely)
-  - confidence score
-  - recency (`updated_at` decay)
-  - optional memory status weighting
+Implemented ranking inputs for memory retrieval:
+
+- visibility (`shared` preferred ahead of private)
+- confidence score
+- recency (`updated_at` fallback to `timestamp`)
+
+Still planned:
+
+- optional memory status weighting beyond filtering
 - Add explainability fields in search results:
   - `rank_components`
   - `match_reasons`
@@ -76,6 +80,7 @@ Still planned:
   - lifecycle transitions: `active -> archived|invalidated`
   - owner-checked `archive` and `invalidate` endpoints
   - retrieval status filter with default `active`
+  - ranking hints using visibility, confidence, and recency ordering
 - Remaining for full 3B:
-  - recency/confidence-aware ranking changes
   - merge/supersede lifecycle operations
+  - optional ranking explanation payloads

@@ -34,6 +34,7 @@ This file maps Phase 3 work to the intended deployment profile:
 - **Implemented so far**:
   - visibility/owner/status filters
   - archive/invalidate endpoints
+  - ranking hints for shared preference, confidence, and recency
 - **Can defer**:
   - full merge/supersede automation
   - heavy explanation payloads

@@ -63,6 +63,7 @@ def fts_search_memories(
         f"FROM memories m "
         f"INNER JOIN fts_memories f ON f.memory_id = m.id "
         f"WHERE {where_clause} "
+        f"{_memory_order_by_clause()} "
         f"LIMIT ? OFFSET ?",
         query_params,
     ).fetchall()
@@ -116,6 +117,13 @@ def _build_memory_filter_predicate(visibility=None, owner_agent_id=None, status=
     return "(" + " AND ".join(predicates) + ")", bind_params
 
 
+def _memory_order_by_clause():
+    return (
+        " ORDER BY CASE visibility WHEN 'shared' THEN 0 ELSE 1 END,"
+        " confidence DESC, COALESCE(updated_at, timestamp) DESC, id DESC"
+    )
+
+
 def list_memories(
     db: sqlite3.Connection,
     limit: int = 20,
@@ -136,6 +144,7 @@ def list_memories(
     rows = db.execute(
         f"SELECT id, name, type, content, description, timestamp, confidence, owner_agent_id, visibility, status "
         f"FROM memories{where_clause} "
+        f"{_memory_order_by_clause()} "
         f"LIMIT ? OFFSET ?",
         query_params,
     ).fetchall()
@@ -167,6 +176,7 @@ def list_memories_scoped(
         f"SELECT id, name, type, content, description, timestamp, confidence, "
         f"owner_agent_id, visibility, status FROM memories "
         f"WHERE {predicate} "
+        f"{_memory_order_by_clause()} "
         f"LIMIT ? OFFSET ?",
         query_params,
     ).fetchall()
@@ -216,6 +226,7 @@ def fts_search_memories_scoped(
         f"INNER JOIN fts_memories f ON f.memory_id = m.id "
         f"WHERE {predicate} "
         f"AND f.fts_memories MATCH ? "
+        f"{_memory_order_by_clause()} "
         f"LIMIT ? OFFSET ?",
         full_query_params,
     ).fetchall()
