@@ -85,6 +85,17 @@ def test_create_memory_returns_400_when_visibility_invalid(client):
     assert resp.status_code == 400
 
 
+def test_create_memory_idempotency_key_replays_existing_row(client):
+    payload = _memory_payload(idempotency_key="mem-unique-1")
+    first = client.post("/memory", json=payload)
+    second = client.post("/memory", json=payload)
+
+    assert first.status_code == 201
+    assert second.status_code == 200
+    assert first.get_json()["id"] == second.get_json()["id"]
+    assert second.get_json()["idempotent_replay"] is True
+
+
 # ---------------------------------------------------------------------------
 # GET /memory/list
 # ---------------------------------------------------------------------------
@@ -115,6 +126,57 @@ def test_list_memories_grows_with_each_insert(client):
             json=_memory_payload(name=f"mem-{i}", content=f"content {i}"),
         )
     assert len(client.get("/memory/list").get_json()) == 3
+
+
+def test_list_memories_filters_by_run_id(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="run-1", content="alpha", run_id="task-123"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="run-2", content="beta", run_id="task-999"),
+    )
+
+    items = client.get("/memory/list?run_id=task-123").get_json()
+    assert len(items) == 1
+    assert items[0]["run_id"] == "task-123"
+
+
+def test_list_memories_filters_by_tag(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="tag-1", content="alpha", tags="ops,decision"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="tag-2", content="beta", tags="ops,trace"),
+    )
+
+    items = client.get("/memory/list?tag=decision").get_json()
+    assert len(items) == 1
+    assert items[0]["name"] == "tag-1"
+
+
+def test_list_memories_filters_by_min_confidence(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="high", content="alpha"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="low", content="beta", description="low confidence"),
+    )
+    # Lower the second row confidence directly to validate filtering.
+    low_id = next(i["id"] for i in client.get("/memory/list").get_json() if i["name"] == "low")
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute("UPDATE memories SET confidence = 0.1 WHERE id = ?", (low_id,))
+        db.commit()
+
+    items = client.get("/memory/list?min_confidence=0.5").get_json()
+    assert all(i["confidence"] >= 0.5 for i in items)
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +228,21 @@ def test_recall_rejects_blank_topic(client):
     assert resp.status_code == 400
 
 
+def test_recall_filters_by_tag(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="ops-1", content="deploy rollout", tags="deploy,ops"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="ops-2", content="deploy dry run", tags="test"),
+    )
+
+    results = client.get("/memory/recall?topic=deploy&tag=ops").get_json()
+    assert len(results) == 1
+    assert results[0]["name"] == "ops-1"
+
+
 # ---------------------------------------------------------------------------
 # GET /memory/search
 # ---------------------------------------------------------------------------
@@ -208,6 +285,16 @@ def test_memory_search_supports_limit_param(client):
 
 def test_memory_search_rejects_invalid_offset(client):
     resp = client.get("/memory/search?q=search&offset=-1")
+    assert resp.status_code == 400
+
+
+def test_memory_search_rejects_invalid_min_confidence(client):
+    resp = client.get("/memory/search?q=search&min_confidence=2")
+    assert resp.status_code == 400
+
+
+def test_memory_search_rejects_invalid_recency_half_life(client):
+    resp = client.get("/memory/search?q=search&recency_half_life_hours=0")
     assert resp.status_code == 400
 
 
@@ -320,6 +407,60 @@ def test_invalidate_memory_returns_200_for_owner(client):
     )
     assert invalidate.status_code == 200
     assert invalidate.get_json()["status"] == "invalidated"
+
+
+def test_verify_memory_returns_200_for_owner(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="verify-me", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    verify = client.post(
+        "/memory/verify",
+        json={
+            "memory_id": memory_id,
+            "agent_id": "agent-alpha",
+            "verification_status": "verified",
+            "verification_source": "unit-test",
+        },
+    )
+    assert verify.status_code == 200
+    assert verify.get_json()["verification_status"] == "verified"
+
+
+def test_verify_memory_returns_403_for_non_owner(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="verify-private", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    verify = client.post(
+        "/memory/verify",
+        json={
+            "memory_id": memory_id,
+            "agent_id": "agent-beta",
+            "verification_status": "verified",
+        },
+    )
+    assert verify.status_code == 403
+
+
+def test_batch_memory_create_returns_results(client):
+    resp = client.post(
+        "/memory/batch",
+        json={
+            "memories": [
+                _memory_payload(name="batch-1", content="alpha", idempotency_key="batch-key-1"),
+                _memory_payload(name="batch-2", content="beta", idempotency_key="batch-key-2"),
+            ]
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.get_json()
+    assert "results" in data
+    assert len(data["results"]) == 2
 
 
 def test_archive_memory_requires_json_body(client):

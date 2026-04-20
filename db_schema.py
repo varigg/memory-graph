@@ -31,7 +31,13 @@ CREATE TABLE IF NOT EXISTS memories (
     content     TEXT,
     description TEXT,
     timestamp   DATETIME DEFAULT CURRENT_TIMESTAMP,
-    confidence  REAL DEFAULT 1.0
+    confidence  REAL DEFAULT 1.0,
+    tags        TEXT DEFAULT '',
+    run_id      TEXT,
+    idempotency_key TEXT,
+    verification_status TEXT DEFAULT 'unverified' CHECK (verification_status IN ('unverified', 'verified', 'disputed')),
+    verification_source TEXT,
+    verified_at DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS entities (
@@ -194,6 +200,42 @@ def _ensure_memories_scope_columns(conn: sqlite3.Connection) -> None:
             "ADD COLUMN status_updated_at DATETIME"
         )
 
+    if "tags" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN tags TEXT DEFAULT ''"
+        )
+
+    if "run_id" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN run_id TEXT"
+        )
+
+    if "idempotency_key" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN idempotency_key TEXT"
+        )
+
+    if "verification_status" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN verification_status TEXT DEFAULT 'unverified'"
+        )
+
+    if "verification_source" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN verification_source TEXT"
+        )
+
+    if "verified_at" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN verified_at DATETIME"
+        )
+
     conn.execute(
         "UPDATE memories "
         "SET owner_agent_id = COALESCE(NULLIF(TRIM(owner_agent_id), ''), 'unknown')"
@@ -215,6 +257,16 @@ def _ensure_memories_scope_columns(conn: sqlite3.Connection) -> None:
     conn.execute(
         "UPDATE memories "
         "SET status_updated_at = COALESCE(status_updated_at, updated_at, timestamp, CURRENT_TIMESTAMP)"
+    )
+    conn.execute(
+        "UPDATE memories "
+        "SET tags = COALESCE(tags, '')"
+    )
+    conn.execute(
+        "UPDATE memories "
+        "SET verification_status = CASE "
+        "WHEN verification_status IN ('unverified', 'verified', 'disputed') THEN verification_status "
+        "ELSE 'unverified' END"
     )
 
 
@@ -242,6 +294,19 @@ def init(db_path: str) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_memories_status_updated_at "
         "ON memories(status_updated_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memories_run_id "
+        "ON memories(run_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memories_confidence "
+        "ON memories(confidence)"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_owner_idempotency "
+        "ON memories(owner_agent_id, idempotency_key) "
+        "WHERE idempotency_key IS NOT NULL"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_memory_relations_source "

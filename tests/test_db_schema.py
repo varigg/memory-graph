@@ -244,9 +244,15 @@ class TestMemoriesColumns:
         "description",
         "timestamp",
         "confidence",
+        "tags",
+        "run_id",
+        "idempotency_key",
         "owner_agent_id",
         "visibility",
         "updated_at",
+        "verification_status",
+        "verification_source",
+        "verified_at",
     }
 
     def test_memories_has_all_required_columns(self, tmp_path):

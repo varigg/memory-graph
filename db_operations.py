@@ -46,9 +46,20 @@ def fts_search_memories(
     visibility: str = None,
     owner_agent_id: str = None,
     status: str = "active",
+    run_id: str = None,
+    tag: str = None,
+    min_confidence: float = None,
+    updated_since: str = None,
+    recency_half_life_hours: float = None,
 ) -> list:
     filter_predicate, filter_params = _build_memory_filter_predicate(
-        visibility, owner_agent_id, status
+        visibility,
+        owner_agent_id,
+        status,
+        run_id,
+        tag,
+        min_confidence,
+        updated_since,
     )
     where_clause = "f.fts_memories MATCH ?"
     query_params = [query]
@@ -57,13 +68,15 @@ def fts_search_memories(
         where_clause = f"{where_clause} AND {filter_predicate}"
         query_params.extend(filter_params)
 
+    order_clause, order_params = _memory_order_by_clause(recency_half_life_hours)
+    query_params.extend(order_params)
     query_params.extend([limit, offset])
     rows = db.execute(
         f"SELECT m.name, m.content, m.description, m.id "
         f"FROM memories m "
         f"INNER JOIN fts_memories f ON f.memory_id = m.id "
         f"WHERE {where_clause} "
-        f"{_memory_order_by_clause()} "
+        f"{order_clause} "
         f"LIMIT ? OFFSET ?",
         query_params,
     ).fetchall()
@@ -95,7 +108,15 @@ def _build_scope_predicate(agent_id, shared_only=False, private_only=False):
     )
 
 
-def _build_memory_filter_predicate(visibility=None, owner_agent_id=None, status="active"):
+def _build_memory_filter_predicate(
+    visibility=None,
+    owner_agent_id=None,
+    status="active",
+    run_id=None,
+    tag=None,
+    min_confidence=None,
+    updated_since=None,
+):
     predicates = []
     bind_params = []
 
@@ -111,16 +132,42 @@ def _build_memory_filter_predicate(visibility=None, owner_agent_id=None, status=
         predicates.append("status = ?")
         bind_params.append(status)
 
+    if run_id is not None:
+        predicates.append("run_id = ?")
+        bind_params.append(run_id)
+
+    if tag is not None:
+        # Store tags as comma-separated values and match exact token boundaries.
+        predicates.append("(',' || LOWER(COALESCE(tags, '')) || ',') LIKE ?")
+        bind_params.append(f"%,{tag.lower()},%")
+
+    if min_confidence is not None:
+        predicates.append("confidence >= ?")
+        bind_params.append(min_confidence)
+
+    if updated_since is not None:
+        predicates.append("COALESCE(updated_at, timestamp) >= ?")
+        bind_params.append(updated_since)
+
     if not predicates:
         return "", []
 
     return "(" + " AND ".join(predicates) + ")", bind_params
 
 
-def _memory_order_by_clause():
+def _memory_order_by_clause(recency_half_life_hours: float = None):
+    if recency_half_life_hours is not None and recency_half_life_hours > 0:
+        return (
+            " ORDER BY CASE visibility WHEN 'shared' THEN 0 ELSE 1 END,"
+            " (confidence + MAX(0.0, 1.0 - ((julianday('now') - julianday(COALESCE(updated_at, timestamp))) * 24.0) / ?)) DESC,"
+            " COALESCE(updated_at, timestamp) DESC, id DESC",
+            [recency_half_life_hours],
+        )
+
     return (
         " ORDER BY CASE visibility WHEN 'shared' THEN 0 ELSE 1 END,"
-        " confidence DESC, COALESCE(updated_at, timestamp) DESC, id DESC"
+        " confidence DESC, COALESCE(updated_at, timestamp) DESC, id DESC",
+        [],
     )
 
 
@@ -131,20 +178,33 @@ def list_memories(
     visibility: str = None,
     owner_agent_id: str = None,
     status: str = "active",
+    run_id: str = None,
+    tag: str = None,
+    min_confidence: float = None,
+    updated_since: str = None,
+    recency_half_life_hours: float = None,
 ) -> list:
     filter_predicate, filter_params = _build_memory_filter_predicate(
-        visibility, owner_agent_id, status
+        visibility,
+        owner_agent_id,
+        status,
+        run_id,
+        tag,
+        min_confidence,
+        updated_since,
     )
     where_clause = ""
     query_params = list(filter_params)
     if filter_predicate:
         where_clause = f" WHERE {filter_predicate}"
 
+    order_clause, order_params = _memory_order_by_clause(recency_half_life_hours)
+    query_params.extend(order_params)
     query_params.extend([limit, offset])
     rows = db.execute(
-        f"SELECT id, name, type, content, description, timestamp, confidence, owner_agent_id, visibility, status "
+        f"SELECT id, name, type, content, description, timestamp, confidence, owner_agent_id, visibility, status, tags, run_id, idempotency_key, verification_status, verification_source, verified_at "
         f"FROM memories{where_clause} "
-        f"{_memory_order_by_clause()} "
+        f"{order_clause} "
         f"LIMIT ? OFFSET ?",
         query_params,
     ).fetchall()
@@ -161,22 +221,34 @@ def list_memories_scoped(
     visibility: str = None,
     owner_agent_id: str = None,
     status: str = "active",
+    run_id: str = None,
+    tag: str = None,
+    min_confidence: float = None,
+    updated_since: str = None,
+    recency_half_life_hours: float = None,
 ) -> list:
     """List memories with visibility scoping applied."""
     predicate, bind_params = _build_scope_predicate(agent_id, shared_only, private_only)
     filter_predicate, filter_params = _build_memory_filter_predicate(
-        visibility, owner_agent_id, status
+        visibility,
+        owner_agent_id,
+        status,
+        run_id,
+        tag,
+        min_confidence,
+        updated_since,
     )
     if filter_predicate:
         predicate = f"{predicate} AND {filter_predicate}"
         bind_params.extend(filter_params)
-    query_params = bind_params + [limit, offset]
+    order_clause, order_params = _memory_order_by_clause(recency_half_life_hours)
+    query_params = bind_params + order_params + [limit, offset]
 
     rows = db.execute(
         f"SELECT id, name, type, content, description, timestamp, confidence, "
-        f"owner_agent_id, visibility, status FROM memories "
+        f"owner_agent_id, visibility, status, tags, run_id, idempotency_key, verification_status, verification_source, verified_at FROM memories "
         f"WHERE {predicate} "
-        f"{_memory_order_by_clause()} "
+        f"{order_clause} "
         f"LIMIT ? OFFSET ?",
         query_params,
     ).fetchall()
@@ -192,6 +264,12 @@ def list_memories_scoped(
             "owner_agent_id": r[7],
             "visibility": r[8],
             "status": r[9],
+            "tags": r[10],
+            "run_id": r[11],
+            "idempotency_key": r[12],
+            "verification_status": r[13],
+            "verification_source": r[14],
+            "verified_at": r[15],
         }
         for r in rows
     ]
@@ -208,25 +286,37 @@ def fts_search_memories_scoped(
     visibility: str = None,
     owner_agent_id: str = None,
     status: str = "active",
+    run_id: str = None,
+    tag: str = None,
+    min_confidence: float = None,
+    updated_since: str = None,
+    recency_half_life_hours: float = None,
 ) -> list:
     """FTS search on memories with visibility scoping."""
     predicate, bind_params = _build_scope_predicate(agent_id, shared_only, private_only)
     filter_predicate, filter_params = _build_memory_filter_predicate(
-        visibility, owner_agent_id, status
+        visibility,
+        owner_agent_id,
+        status,
+        run_id,
+        tag,
+        min_confidence,
+        updated_since,
     )
     if filter_predicate:
         predicate = f"{predicate} AND {filter_predicate}"
         bind_params.extend(filter_params)
 
     # Build parameter list in correct order: scope params, query, limit, offset
-    full_query_params = bind_params + [query, limit, offset]
+    order_clause, order_params = _memory_order_by_clause(recency_half_life_hours)
+    full_query_params = bind_params + [query] + order_params + [limit, offset]
     rows = db.execute(
         f"SELECT m.name, m.content, m.description, m.id "
         f"FROM memories m "
         f"INNER JOIN fts_memories f ON f.memory_id = m.id "
         f"WHERE {predicate} "
         f"AND f.fts_memories MATCH ? "
-        f"{_memory_order_by_clause()} "
+        f"{order_clause} "
         f"LIMIT ? OFFSET ?",
         full_query_params,
     ).fetchall()
@@ -263,15 +353,81 @@ def insert_memory(
     confidence: float = 1.0,
     owner_agent_id: str = "unknown",
     visibility: str = "shared",
+    tags: str = "",
+    run_id: str = None,
+    idempotency_key: str = None,
 ) -> int:
     cur = db.execute(
         "INSERT INTO memories ("
-        "name, type, content, description, confidence, owner_agent_id, visibility"
-        ") VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (name, type_, content, description, confidence, owner_agent_id, visibility),
+        "name, type, content, description, confidence, owner_agent_id, visibility, tags, run_id, idempotency_key"
+        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            name,
+            type_,
+            content,
+            description,
+            confidence,
+            owner_agent_id,
+            visibility,
+            tags,
+            run_id,
+            idempotency_key,
+        ),
     )
     db.commit()
     return cur.lastrowid
+
+
+def get_memory_by_idempotency_key(
+    db: sqlite3.Connection,
+    owner_agent_id: str,
+    idempotency_key: str,
+):
+    return db.execute(
+        "SELECT id FROM memories WHERE owner_agent_id = ? AND idempotency_key = ?",
+        (owner_agent_id, idempotency_key),
+    ).fetchone()
+
+
+def set_memory_verification(
+    db: sqlite3.Connection,
+    memory_id: int,
+    requester_agent_id: str,
+    verification_status: str,
+    verification_source: str = None,
+):
+    row = db.execute(
+        "SELECT id, owner_agent_id FROM memories WHERE id = ?",
+        (memory_id,),
+    ).fetchone()
+    if row is None:
+        return None, "not_found"
+    if row[1] != requester_agent_id:
+        return None, "forbidden"
+
+    if verification_status not in {"unverified", "verified", "disputed"}:
+        return None, "invalid_status"
+
+    if verification_status == "verified":
+        db.execute(
+            "UPDATE memories "
+            "SET verification_status = ?, verification_source = ?, verified_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?",
+            (verification_status, verification_source, memory_id),
+        )
+    else:
+        db.execute(
+            "UPDATE memories "
+            "SET verification_status = ?, verification_source = ?, verified_at = NULL, updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?",
+            (verification_status, verification_source, memory_id),
+        )
+    db.commit()
+    return {
+        "id": memory_id,
+        "verification_status": verification_status,
+        "verification_source": verification_source,
+    }, None
 
 
 def promote_memory_to_shared(

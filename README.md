@@ -24,6 +24,14 @@ export OPENAI_API_KEY=sk-...  # or GOOGLE_API_KEY=AIza...
 uv run python api_server.py
 ```
 
+Environment note:
+
+- `uv` manages the project environment in `.venv`.
+- If you see a warning about `VIRTUAL_ENV` pointing elsewhere, clear it with
+  `unset VIRTUAL_ENV` in your shell and continue using `uv run ...`.
+- Avoid keeping both `.venv` and a second project-local `venv` directory to
+  prevent interpreter drift.
+
 ### Using pip + venv (alternative)
 
 ```bash
@@ -125,16 +133,31 @@ Application-level handlers are registered for `404`, `405`, `413`, and `500`.
 - `POST /memory`
   - Body: `name` (required), `content` (required), `owner_agent_id` (required),
     `visibility` (optional: `shared` or `private`, default `shared`)
+  - Optional write controls: `tags`, `run_id`, `idempotency_key`
+- `POST /memory/batch`
+  - Body: `{"memories": [ ... ]}` where each item follows `POST /memory`
 - `POST /memory/<id>/promote?agent_id=<id>`
   - Owner-only promote of private memory to shared
 - `POST /memory/archive`
   - Body: `memory_id` (required int), `agent_id` (required)
 - `POST /memory/invalidate`
   - Body: `memory_id` (required int), `agent_id` (required)
+- `POST /memory/verify`
+  - Body: `memory_id` (required int), `agent_id` (required),
+    `verification_status` (`unverified|verified|disputed`),
+    `verification_source` (optional)
 - `GET /memory/list?limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
 - `GET /memory/recall?topic=<topic>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
 - `GET /memory/search?q=<query>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
 - `DELETE /memory/<id>`
+
+Additional memory retrieval filters (for `list`, `recall`, and `search`):
+
+- `run_id=<id>`
+- `tag=<token>`
+- `min_confidence=<0..1>`
+- `updated_since=<timestamp>`
+- `recency_half_life_hours=<positive_number>`
 
 Read-scope behavior when `agent_id` is provided:
 
@@ -153,6 +176,13 @@ Ranking behavior for memory retrieval:
 - shared memories are preferred ahead of private ones
 - higher-confidence memories rank ahead of lower-confidence ones
 - newer memories break ties using `updated_at` / `timestamp`
+- optional recency weighting can bias results toward fresher memories via
+  `recency_half_life_hours`
+
+Idempotency behavior for memory writes:
+
+- when `idempotency_key` is provided, duplicate writes by the same
+  `owner_agent_id` return the existing memory id instead of creating a new row
 
 ### Entities
 
@@ -199,10 +229,7 @@ Phase 2 is implemented in four subphases:
 
 See:
 
-- `docs/phase2a.md`
-- `docs/phase2b.md`
-- `docs/phase2c.md`
-- `docs/phase2d.md`
+- `docs/phase1-2-consolidated.md`
 
 ## Phase 3 Status
 
@@ -230,6 +257,7 @@ See:
 - `docs/phase3c.md`
 - `docs/phase3-overview.md`
 - `docs/phase3-backlog.md`
+- `docs/agent-memory-ops.md` (autonomous-agent operational usage and restart guide)
 
 ## Testing
 
@@ -261,14 +289,7 @@ memory-graph/
 │   ├── search.py
 │   └── utility.py
 ├── docs/
-│   ├── phase1a.md
-│   ├── phase1b.md
-│   ├── phase1c.md
-│   ├── phase1d.md
-│   ├── phase2a.md
-│   ├── phase2b.md
-│   ├── phase2c.md
-│   ├── phase2d.md
+│   ├── phase1-2-consolidated.md
 │   ├── phase3a.md
 │   ├── phase3a-pr-chunks.md
 │   ├── phase3b.md

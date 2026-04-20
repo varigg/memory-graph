@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request
 from db_operations import (
     fts_search_memories,
     fts_search_memories_scoped,
+    get_memory_by_idempotency_key,
     insert_entity,
     insert_memory,
 )
@@ -11,6 +12,7 @@ from db_operations import (
     list_memories_scoped,
     promote_memory_to_shared,
     relate_memory_lifecycle,
+    set_memory_verification,
     transition_memory_status,
 )
 from db_utils import get_db
@@ -53,39 +55,148 @@ def _parse_scope_flags():
 
 
 def _parse_read_filters():
+    def _err(message):
+        return (
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            jsonify({"error": message}),
+            400,
+        )
+
     visibility = request.args.get("visibility")
     owner_agent_id = request.args.get("owner_agent_id")
     status = request.args.get("status", "active")
 
     if visibility is not None and visibility not in {"shared", "private"}:
-        return (
-            None,
-            None,
-            None,
-            jsonify({"error": "visibility must be 'shared' or 'private'"}),
-            400,
-        )
+        return _err("visibility must be 'shared' or 'private'")
 
     if status not in {"active", "archived", "invalidated"}:
-        return (
-            None,
-            None,
-            None,
-            jsonify({"error": "status must be 'active', 'archived', or 'invalidated'"}),
-            400,
-        )
+        return _err("status must be 'active', 'archived', or 'invalidated'")
 
     if owner_agent_id is not None and not owner_agent_id.strip():
-        return (
-            None,
-            None,
-            None,
-            jsonify({"error": "owner_agent_id must be non-empty"}),
-            400,
-        )
+        return _err("owner_agent_id must be non-empty")
 
     normalized_owner = owner_agent_id.strip() if owner_agent_id is not None else None
-    return visibility, normalized_owner, status, None, None
+    run_id = request.args.get("run_id")
+    normalized_run_id = run_id.strip() if run_id is not None and run_id.strip() else None
+
+    tag = request.args.get("tag")
+    normalized_tag = tag.strip() if tag is not None and tag.strip() else None
+
+    min_confidence = request.args.get("min_confidence")
+    parsed_min_confidence = None
+    if min_confidence is not None:
+        try:
+            parsed_min_confidence = float(min_confidence)
+        except ValueError:
+            return _err("min_confidence must be a number")
+        if parsed_min_confidence < 0.0 or parsed_min_confidence > 1.0:
+            return _err("min_confidence must be between 0 and 1")
+
+    updated_since = request.args.get("updated_since")
+    normalized_updated_since = (
+        updated_since.strip() if updated_since is not None and updated_since.strip() else None
+    )
+
+    recency_half_life_hours = request.args.get("recency_half_life_hours")
+    parsed_recency_half_life_hours = None
+    if recency_half_life_hours is not None:
+        try:
+            parsed_recency_half_life_hours = float(recency_half_life_hours)
+        except ValueError:
+            return _err("recency_half_life_hours must be a number")
+        if parsed_recency_half_life_hours <= 0:
+            return _err("recency_half_life_hours must be > 0")
+
+    return (
+        visibility,
+        normalized_owner,
+        status,
+        normalized_run_id,
+        normalized_tag,
+        parsed_min_confidence,
+        normalized_updated_since,
+        parsed_recency_half_life_hours,
+        None,
+        None,
+    )
+
+
+def _normalize_memory_payload(data):
+    if not data:
+        return None, jsonify({"error": "JSON body required"}), 400
+
+    name = data.get("name")
+    content = data.get("content")
+    if not name or not content:
+        return None, jsonify({"error": "name and content are required"}), 400
+
+    owner_agent_id = data.get("owner_agent_id")
+    if not isinstance(owner_agent_id, str) or not owner_agent_id.strip():
+        return None, jsonify({"error": "owner_agent_id is required"}), 400
+
+    visibility = data.get("visibility", "shared")
+    if visibility not in {"shared", "private"}:
+        return None, jsonify({"error": "visibility must be 'shared' or 'private'"}), 400
+
+    type_ = data.get("type", "note")
+    description = data.get("description", "")
+    tags = data.get("tags", "")
+    if tags is None:
+        tags = ""
+    if not isinstance(tags, str):
+        return None, jsonify({"error": "tags must be a string"}), 400
+
+    run_id = data.get("run_id")
+    if run_id is not None and (not isinstance(run_id, str) or not run_id.strip()):
+        return None, jsonify({"error": "run_id must be a non-empty string when provided"}), 400
+
+    idempotency_key = data.get("idempotency_key")
+    if idempotency_key is not None and (
+        not isinstance(idempotency_key, str) or not idempotency_key.strip()
+    ):
+        return None, jsonify({"error": "idempotency_key must be a non-empty string when provided"}), 400
+
+    return {
+        "name": name,
+        "content": content,
+        "owner_agent_id": owner_agent_id.strip(),
+        "visibility": visibility,
+        "type": type_,
+        "description": description,
+        "tags": tags,
+        "run_id": run_id.strip() if isinstance(run_id, str) else None,
+        "idempotency_key": idempotency_key.strip() if isinstance(idempotency_key, str) else None,
+    }, None, None
+
+
+def _create_or_get_memory(db, payload):
+    idempotency_key = payload["idempotency_key"]
+    owner_agent_id = payload["owner_agent_id"]
+    if idempotency_key:
+        existing = get_memory_by_idempotency_key(db, owner_agent_id, idempotency_key)
+        if existing is not None:
+            return {"id": existing[0], "created": False}
+
+    rowid = insert_memory(
+        db,
+        payload["name"],
+        payload["type"],
+        payload["content"],
+        payload["description"],
+        owner_agent_id=owner_agent_id,
+        visibility=payload["visibility"],
+        tags=payload["tags"],
+        run_id=payload["run_id"],
+        idempotency_key=idempotency_key,
+    )
+    return {"id": rowid, "created": True}
 
 
 def _transition_memory_lifecycle(target_status):
@@ -159,31 +270,36 @@ def _relate_memory_lifecycle(relation_type):
 @bp.route("/memory", methods=["POST"])
 def create_memory():
     data = request.get_json(silent=True)
+    payload, err_resp, err_status = _normalize_memory_payload(data)
+    if err_resp is not None:
+        return err_resp, err_status
+
+    db = get_db()
+    result = _create_or_get_memory(db, payload)
+    if result["created"]:
+        return jsonify({"id": result["id"]}), 201
+    return jsonify({"id": result["id"], "idempotent_replay": True}), 200
+
+
+@bp.route("/memory/batch", methods=["POST"])
+def create_memory_batch():
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "JSON body required"}), 400
-    name = data.get("name")
-    content = data.get("content")
-    if not name or not content:
-        return jsonify({"error": "name and content are required"}), 400
-    owner_agent_id = data.get("owner_agent_id")
-    if not isinstance(owner_agent_id, str) or not owner_agent_id.strip():
-        return jsonify({"error": "owner_agent_id is required"}), 400
-    visibility = data.get("visibility", "shared")
-    if visibility not in {"shared", "private"}:
-        return jsonify({"error": "visibility must be 'shared' or 'private'"}), 400
-    type_ = data.get("type", "note")
-    description = data.get("description", "")
+
+    memories = data.get("memories")
+    if not isinstance(memories, list) or not memories:
+        return jsonify({"error": "memories must be a non-empty list"}), 400
+
     db = get_db()
-    rowid = insert_memory(
-        db,
-        name,
-        type_,
-        content,
-        description,
-        owner_agent_id=owner_agent_id.strip(),
-        visibility=visibility,
-    )
-    return jsonify({"id": rowid}), 201
+    created = []
+    for index, item in enumerate(memories):
+        payload, err_resp, err_status = _normalize_memory_payload(item)
+        if err_resp is not None:
+            return jsonify({"error": f"invalid item at index {index}", "detail": err_resp.get_json()["error"]}), err_status
+        created.append(_create_or_get_memory(db, payload))
+
+    return jsonify({"results": created}), 201
 
 
 @bp.route("/memory/<int:memory_id>/promote", methods=["POST"])
@@ -211,6 +327,41 @@ def invalidate_memory():
     return _transition_memory_lifecycle("invalidated")
 
 
+@bp.route("/memory/verify", methods=["POST"])
+def verify_memory():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    memory_id = data.get("memory_id")
+    agent_id = data.get("agent_id")
+    verification_status = data.get("verification_status")
+    verification_source = data.get("verification_source")
+
+    if not isinstance(memory_id, int):
+        return jsonify({"error": "memory_id must be an integer"}), 400
+    if not isinstance(agent_id, str) or not agent_id.strip():
+        return jsonify({"error": "agent_id is required"}), 400
+    if verification_status not in {"unverified", "verified", "disputed"}:
+        return jsonify({"error": "verification_status must be 'unverified', 'verified', or 'disputed'"}), 400
+    if verification_source is not None and not isinstance(verification_source, str):
+        return jsonify({"error": "verification_source must be a string when provided"}), 400
+
+    db = get_db()
+    verified, err = set_memory_verification(
+        db,
+        memory_id,
+        agent_id.strip(),
+        verification_status,
+        verification_source,
+    )
+    if err == "not_found":
+        return jsonify({"error": "not found"}), 404
+    if err == "forbidden":
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify(verified), 200
+
+
 @bp.route("/memory/merge", methods=["POST"])
 def merge_memory():
     return _relate_memory_lifecycle("merged_into")
@@ -231,7 +382,18 @@ def list_memories():
     shared_only, private_only, err_resp, err_status = _parse_scope_flags()
     if err_resp is not None:
         return err_resp, err_status
-    visibility, owner_agent_id, status, err_resp, err_status = _parse_read_filters()
+    (
+        visibility,
+        owner_agent_id,
+        status,
+        run_id,
+        tag,
+        min_confidence,
+        updated_since,
+        recency_half_life_hours,
+        err_resp,
+        err_status,
+    ) = _parse_read_filters()
     if err_resp is not None:
         return err_resp, err_status
 
@@ -249,11 +411,28 @@ def list_memories():
             visibility,
             owner_agent_id,
             status,
+            run_id,
+            tag,
+            min_confidence,
+            updated_since,
+            recency_half_life_hours,
         )
         return jsonify(rows)
 
     # Legacy behavior: no scoping if agent_id not provided
-    rows = list_memories_db(db, limit, offset, visibility, owner_agent_id, status)
+    rows = list_memories_db(
+        db,
+        limit,
+        offset,
+        visibility,
+        owner_agent_id,
+        status,
+        run_id,
+        tag,
+        min_confidence,
+        updated_since,
+        recency_half_life_hours,
+    )
     return jsonify(rows)
 
 
@@ -273,7 +452,18 @@ def recall_memory():
     shared_only, private_only, err_resp, err_status = _parse_scope_flags()
     if err_resp is not None:
         return err_resp, err_status
-    visibility, owner_agent_id, status, err_resp, err_status = _parse_read_filters()
+    (
+        visibility,
+        owner_agent_id,
+        status,
+        run_id,
+        tag,
+        min_confidence,
+        updated_since,
+        recency_half_life_hours,
+        err_resp,
+        err_status,
+    ) = _parse_read_filters()
     if err_resp is not None:
         return err_resp, err_status
 
@@ -292,6 +482,11 @@ def recall_memory():
                 visibility=visibility,
                 owner_agent_id=owner_agent_id,
                 status=status,
+                run_id=run_id,
+                tag=tag,
+                min_confidence=min_confidence,
+                updated_since=updated_since,
+                recency_half_life_hours=recency_half_life_hours,
             )
         else:
             results = fts_search_memories(
@@ -302,6 +497,11 @@ def recall_memory():
                 visibility=visibility,
                 owner_agent_id=owner_agent_id,
                 status=status,
+                run_id=run_id,
+                tag=tag,
+                min_confidence=min_confidence,
+                updated_since=updated_since,
+                recency_half_life_hours=recency_half_life_hours,
             )
     except Exception:
         results = []
@@ -324,7 +524,18 @@ def search_memory():
     shared_only, private_only, err_resp, err_status = _parse_scope_flags()
     if err_resp is not None:
         return err_resp, err_status
-    visibility, owner_agent_id, status, err_resp, err_status = _parse_read_filters()
+    (
+        visibility,
+        owner_agent_id,
+        status,
+        run_id,
+        tag,
+        min_confidence,
+        updated_since,
+        recency_half_life_hours,
+        err_resp,
+        err_status,
+    ) = _parse_read_filters()
     if err_resp is not None:
         return err_resp, err_status
 
@@ -343,6 +554,11 @@ def search_memory():
                 visibility=visibility,
                 owner_agent_id=owner_agent_id,
                 status=status,
+                run_id=run_id,
+                tag=tag,
+                min_confidence=min_confidence,
+                updated_since=updated_since,
+                recency_half_life_hours=recency_half_life_hours,
             )
         else:
             results = fts_search_memories(
@@ -353,6 +569,11 @@ def search_memory():
                 visibility=visibility,
                 owner_agent_id=owner_agent_id,
                 status=status,
+                run_id=run_id,
+                tag=tag,
+                min_confidence=min_confidence,
+                updated_since=updated_since,
+                recency_half_life_hours=recency_half_life_hours,
             )
     except Exception:
         results = []
