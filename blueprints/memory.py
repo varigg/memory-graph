@@ -1,6 +1,11 @@
 from flask import Blueprint, jsonify, request
 
-from db_operations import fts_search_memories, insert_entity, insert_memory
+from db_operations import (
+    fts_search_memories,
+    insert_entity,
+    insert_memory,
+    promote_memory_to_shared,
+)
 from db_utils import get_db
 
 bp = Blueprint("memory", __name__)
@@ -38,11 +43,40 @@ def create_memory():
     content = data.get("content")
     if not name or not content:
         return jsonify({"error": "name and content are required"}), 400
+    owner_agent_id = data.get("owner_agent_id")
+    if not isinstance(owner_agent_id, str) or not owner_agent_id.strip():
+        return jsonify({"error": "owner_agent_id is required"}), 400
+    visibility = data.get("visibility", "shared")
+    if visibility not in {"shared", "private"}:
+        return jsonify({"error": "visibility must be 'shared' or 'private'"}), 400
     type_ = data.get("type", "note")
     description = data.get("description", "")
     db = get_db()
-    rowid = insert_memory(db, name, type_, content, description)
+    rowid = insert_memory(
+        db,
+        name,
+        type_,
+        content,
+        description,
+        owner_agent_id=owner_agent_id.strip(),
+        visibility=visibility,
+    )
     return jsonify({"id": rowid}), 201
+
+
+@bp.route("/memory/<int:memory_id>/promote", methods=["POST"])
+def promote_memory(memory_id):
+    agent_id = request.args.get("agent_id")
+    if agent_id is None or not agent_id.strip():
+        return jsonify({"error": "agent_id query parameter required"}), 400
+
+    db = get_db()
+    promoted, err = promote_memory_to_shared(db, memory_id, agent_id.strip())
+    if err == "not_found":
+        return jsonify({"error": "not found"}), 404
+    if err == "forbidden":
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify(promoted), 200
 
 
 @bp.route("/memory/list", methods=["GET"])

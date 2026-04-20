@@ -1,6 +1,19 @@
 """Tests for the memory blueprint (/memory/*, /entity/*)."""
 
 
+def _memory_payload(name="foo", content="bar", **overrides):
+    payload = {
+        "name": name,
+        "type": "note",
+        "content": content,
+        "description": "",
+        "owner_agent_id": "agent-alpha",
+        "visibility": "shared",
+    }
+    payload.update(overrides)
+    return payload
+
+
 # ---------------------------------------------------------------------------
 # POST /memory
 # ---------------------------------------------------------------------------
@@ -8,7 +21,7 @@
 def test_create_memory_returns_201_on_valid_payload(client):
     resp = client.post(
         "/memory",
-        json={"name": "foo", "type": "note", "content": "bar", "description": "baz"},
+        json=_memory_payload(description="baz"),
     )
     assert resp.status_code == 201
 
@@ -16,7 +29,7 @@ def test_create_memory_returns_201_on_valid_payload(client):
 def test_create_memory_response_contains_id(client):
     resp = client.post(
         "/memory",
-        json={"name": "foo", "type": "note", "content": "bar", "description": "baz"},
+        json=_memory_payload(description="baz"),
     )
     data = resp.get_json()
     assert "id" in data
@@ -26,7 +39,7 @@ def test_create_memory_response_contains_id(client):
 def test_create_memory_returns_400_when_name_missing(client):
     resp = client.post(
         "/memory",
-        json={"type": "note", "content": "bar", "description": "baz"},
+        json=_memory_payload(name=None, description="baz"),
     )
     assert resp.status_code == 400
 
@@ -34,7 +47,7 @@ def test_create_memory_returns_400_when_name_missing(client):
 def test_create_memory_returns_400_when_content_missing(client):
     resp = client.post(
         "/memory",
-        json={"name": "foo", "type": "note", "description": "baz"},
+        json=_memory_payload(content=None, description="baz"),
     )
     assert resp.status_code == 400
 
@@ -44,6 +57,30 @@ def test_create_memory_returns_400_on_non_json_body(client):
         "/memory",
         data="not json",
         content_type="text/plain",
+    )
+    assert resp.status_code == 400
+
+
+def test_create_memory_returns_400_when_owner_agent_id_missing(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(owner_agent_id=None),
+    )
+    assert resp.status_code == 400
+
+
+def test_create_memory_returns_400_when_owner_agent_id_blank(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(owner_agent_id="   "),
+    )
+    assert resp.status_code == 400
+
+
+def test_create_memory_returns_400_when_visibility_invalid(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(visibility="team"),
     )
     assert resp.status_code == 400
 
@@ -65,7 +102,7 @@ def test_list_memories_returns_empty_list_when_none_exist(client):
 def test_list_memories_contains_inserted_memory(client):
     client.post(
         "/memory",
-        json={"name": "my-memory", "type": "note", "content": "some content", "description": "desc"},
+        json=_memory_payload(name="my-memory", content="some content", description="desc"),
     )
     items = client.get("/memory/list").get_json()
     assert any(item["name"] == "my-memory" for item in items)
@@ -75,7 +112,7 @@ def test_list_memories_grows_with_each_insert(client):
     for i in range(3):
         client.post(
             "/memory",
-            json={"name": f"mem-{i}", "type": "note", "content": f"content {i}", "description": ""},
+            json=_memory_payload(name=f"mem-{i}", content=f"content {i}"),
         )
     assert len(client.get("/memory/list").get_json()) == 3
 
@@ -93,7 +130,7 @@ def test_recall_returns_200_with_list(client):
 def test_recall_finds_matching_memory_by_name(client):
     client.post(
         "/memory",
-        json={"name": "deployment-checklist", "type": "note", "content": "run migrations", "description": ""},
+        json=_memory_payload(name="deployment-checklist", content="run migrations"),
     )
     results = client.get("/memory/recall?topic=deployment").get_json()
     assert any("deployment" in r["name"] for r in results)
@@ -102,7 +139,7 @@ def test_recall_finds_matching_memory_by_name(client):
 def test_recall_finds_matching_memory_by_content(client):
     client.post(
         "/memory",
-        json={"name": "alpha", "type": "note", "content": "unique-recall-token", "description": ""},
+        json=_memory_payload(name="alpha", content="unique-recall-token"),
     )
     results = client.get("/memory/recall?topic=unique-recall-token").get_json()
     assert len(results) >= 1
@@ -117,7 +154,7 @@ def test_recall_supports_limit_param(client):
     for i in range(5):
         client.post(
             "/memory",
-            json={"name": f"recall-limit-{i}", "type": "note", "content": "topic token", "description": ""},
+            json=_memory_payload(name=f"recall-limit-{i}", content="topic token"),
         )
     resp = client.get("/memory/recall?topic=topic&limit=2")
     assert resp.status_code == 200
@@ -142,7 +179,7 @@ def test_memory_search_returns_200_with_list(client):
 def test_memory_search_returns_matching_record(client):
     client.post(
         "/memory",
-        json={"name": "fts-target", "type": "note", "content": "searchable phrase", "description": ""},
+        json=_memory_payload(name="fts-target", content="searchable phrase"),
     )
     results = client.get("/memory/search?q=searchable").get_json()
     assert any("searchable" in r.get("content", "") for r in results)
@@ -162,7 +199,7 @@ def test_memory_search_supports_limit_param(client):
     for i in range(5):
         client.post(
             "/memory",
-            json={"name": f"mem-limit-{i}", "type": "note", "content": "search limit token", "description": ""},
+            json=_memory_payload(name=f"mem-limit-{i}", content="search limit token"),
         )
     resp = client.get("/memory/search?q=search&limit=2")
     assert resp.status_code == 200
@@ -181,7 +218,7 @@ def test_memory_search_rejects_invalid_offset(client):
 def _create_memory(client, name="to-delete"):
     resp = client.post(
         "/memory",
-        json={"name": name, "type": "note", "content": "delete me", "description": ""},
+        json=_memory_payload(name=name, content="delete me"),
     )
     return resp.get_json()["id"]
 
@@ -209,6 +246,46 @@ def test_delete_is_idempotent_second_call_returns_404(client):
     client.delete(f"/memory/{mem_id}")
     resp = client.delete(f"/memory/{mem_id}")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /memory/<id>/promote
+# ---------------------------------------------------------------------------
+
+def test_promote_memory_returns_200_for_owner(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="promote-me", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    promote = client.post(f"/memory/{memory_id}/promote?agent_id=agent-alpha")
+    assert promote.status_code == 200
+    data = promote.get_json()
+    assert data["id"] == memory_id
+    assert data["visibility"] == "shared"
+
+
+def test_promote_memory_returns_400_when_agent_id_missing(client):
+    memory_id = _create_memory(client, name="promote-missing-agent")
+    resp = client.post(f"/memory/{memory_id}/promote")
+    assert resp.status_code == 400
+
+
+def test_promote_memory_returns_404_for_unknown_memory(client):
+    resp = client.post("/memory/999999/promote?agent_id=agent-alpha")
+    assert resp.status_code == 404
+
+
+def test_promote_memory_returns_403_for_non_owner(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="private-mem", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    promote = client.post(f"/memory/{memory_id}/promote?agent_id=agent-beta")
+    assert promote.status_code == 403
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +388,7 @@ def test_memory_list_endpoint_bounded_by_default_limit(client):
     for i in range(50):
         client.post(
             "/memory",
-            json={"name": f"perf-mem-{i}", "type": "note", "content": f"content {i}", "description": ""},
+            json=_memory_payload(name=f"perf-mem-{i}", content=f"content {i}"),
         )
     
     # Should paginate, not return all 50
@@ -324,7 +401,7 @@ def test_memory_list_supports_limit_and_offset(client):
     for i in range(30):
         client.post(
             "/memory",
-            json={"name": f"list-mem-{i}", "type": "note", "content": f"content {i}", "description": ""},
+            json=_memory_payload(name=f"list-mem-{i}", content=f"content {i}"),
         )
     
     # Should support limit and offset like other search endpoints

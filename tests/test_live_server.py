@@ -27,6 +27,18 @@ import embeddings as _embeddings_mod
 
 FIXED_VECTOR = [0.1, 0.2, 0.3]
 
+
+def _memory_payload(name, content, **overrides):
+    payload = {
+        "name": name,
+        "content": content,
+        "type": "note",
+        "owner_agent_id": "agent-alpha",
+        "visibility": "shared",
+    }
+    payload.update(overrides)
+    return payload
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -112,7 +124,7 @@ class TestMemory:
     def test_create_memory_returns_id(self, base):
         r = requests.post(
             f"{base}/memory",
-            json={"name": "Test Memory", "content": "Some content here", "type": "note"},
+            json=_memory_payload("Test Memory", "Some content here"),
         )
         assert r.status_code == 201
         assert "id" in r.json()
@@ -132,7 +144,7 @@ class TestMemory:
     def test_list_memories_contains_created(self, base):
         requests.post(
             f"{base}/memory",
-            json={"name": "Listable", "content": "Listed content"},
+            json=_memory_payload("Listable", "Listed content"),
         )
         r = requests.get(f"{base}/memory/list")
         assert r.status_code == 200
@@ -142,7 +154,7 @@ class TestMemory:
     def test_delete_memory(self, base):
         created = requests.post(
             f"{base}/memory",
-            json={"name": "ToDelete", "content": "delete me"},
+            json=_memory_payload("ToDelete", "delete me"),
         ).json()
         memory_id = created["id"]
 
@@ -161,7 +173,7 @@ class TestMemory:
     def test_recall_memory(self, base):
         requests.post(
             f"{base}/memory",
-            json={"name": "Recall Me", "content": "recallable unique content"},
+            json=_memory_payload("Recall Me", "recallable unique content"),
         )
         r = requests.get(f"{base}/memory/recall", params={"topic": "recallable"})
         assert r.status_code == 200
@@ -174,7 +186,7 @@ class TestMemory:
     def test_memory_search(self, base):
         requests.post(
             f"{base}/memory",
-            json={"name": "Searchable", "content": "searchable keyword xyzzy"},
+            json=_memory_payload("Searchable", "searchable keyword xyzzy"),
         )
         r = requests.get(f"{base}/memory/search", params={"q": "xyzzy"})
         assert r.status_code == 200

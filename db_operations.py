@@ -78,14 +78,41 @@ def insert_memory(
     content: str,
     description: str,
     confidence: float = 1.0,
+    owner_agent_id: str = "unknown",
+    visibility: str = "shared",
 ) -> int:
     cur = db.execute(
-        "INSERT INTO memories (name, type, content, description, confidence)"
-        " VALUES (?, ?, ?, ?, ?)",
-        (name, type_, content, description, confidence),
+        "INSERT INTO memories ("
+        "name, type, content, description, confidence, owner_agent_id, visibility"
+        ") VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (name, type_, content, description, confidence, owner_agent_id, visibility),
     )
     db.commit()
     return cur.lastrowid
+
+
+def promote_memory_to_shared(
+    db: sqlite3.Connection,
+    memory_id: int,
+    requester_agent_id: str,
+):
+    row = db.execute(
+        "SELECT id, owner_agent_id FROM memories WHERE id = ?",
+        (memory_id,),
+    ).fetchone()
+    if row is None:
+        return None, "not_found"
+    if row[1] != requester_agent_id:
+        return None, "forbidden"
+
+    db.execute(
+        "UPDATE memories "
+        "SET visibility = 'shared', updated_at = CURRENT_TIMESTAMP "
+        "WHERE id = ?",
+        (memory_id,),
+    )
+    db.commit()
+    return {"id": row[0], "visibility": "shared"}, None
 
 
 def insert_entity(
