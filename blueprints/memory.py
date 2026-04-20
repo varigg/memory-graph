@@ -5,6 +5,7 @@ from db_operations import (
     fts_search_memories_scoped,
     insert_entity,
     insert_memory,
+    list_memories as list_memories_db,
     list_memories_scoped,
     promote_memory_to_shared,
 )
@@ -45,6 +46,20 @@ def _parse_scope_flags():
         ), 400
 
     return shared_only, private_only, None, None
+
+
+def _parse_read_filters():
+    visibility = request.args.get("visibility")
+    owner_agent_id = request.args.get("owner_agent_id")
+
+    if visibility is not None and visibility not in {"shared", "private"}:
+        return None, None, jsonify({"error": "visibility must be 'shared' or 'private'"}), 400
+
+    if owner_agent_id is not None and not owner_agent_id.strip():
+        return None, None, jsonify({"error": "owner_agent_id must be non-empty"}), 400
+
+    normalized_owner = owner_agent_id.strip() if owner_agent_id is not None else None
+    return visibility, normalized_owner, None, None
 
 
 # ---------------------------------------------------------------------------
@@ -107,23 +122,29 @@ def list_memories():
     shared_only, private_only, err_resp, err_status = _parse_scope_flags()
     if err_resp is not None:
         return err_resp, err_status
+    visibility, owner_agent_id, err_resp, err_status = _parse_read_filters()
+    if err_resp is not None:
+        return err_resp, err_status
 
     db = get_db()
 
     # If agent_id is provided, use scoped listing
     if agent_id:
         rows = list_memories_scoped(
-            db, agent_id, limit, offset, shared_only, private_only
+            db,
+            agent_id,
+            limit,
+            offset,
+            shared_only,
+            private_only,
+            visibility,
+            owner_agent_id,
         )
         return jsonify(rows)
 
     # Legacy behavior: no scoping if agent_id not provided
-    rows = db.execute(
-        "SELECT id, name, type, content, description, timestamp, confidence FROM memories"
-        " LIMIT ? OFFSET ?",
-        (limit, offset),
-    ).fetchall()
-    return jsonify([dict(r) for r in rows])
+    rows = list_memories_db(db, limit, offset, visibility, owner_agent_id)
+    return jsonify(rows)
 
 
 @bp.route("/memory/recall", methods=["GET"])
@@ -142,6 +163,9 @@ def recall_memory():
     shared_only, private_only, err_resp, err_status = _parse_scope_flags()
     if err_resp is not None:
         return err_resp, err_status
+    visibility, owner_agent_id, err_resp, err_status = _parse_read_filters()
+    if err_resp is not None:
+        return err_resp, err_status
 
     db = get_db()
     try:
@@ -155,6 +179,8 @@ def recall_memory():
                 offset=offset,
                 shared_only=shared_only,
                 private_only=private_only,
+                visibility=visibility,
+                owner_agent_id=owner_agent_id,
             )
         else:
             results = fts_search_memories(
@@ -162,6 +188,8 @@ def recall_memory():
                 f'"{safe_topic}"',
                 limit=limit,
                 offset=offset,
+                visibility=visibility,
+                owner_agent_id=owner_agent_id,
             )
     except Exception:
         results = []
@@ -184,6 +212,9 @@ def search_memory():
     shared_only, private_only, err_resp, err_status = _parse_scope_flags()
     if err_resp is not None:
         return err_resp, err_status
+    visibility, owner_agent_id, err_resp, err_status = _parse_read_filters()
+    if err_resp is not None:
+        return err_resp, err_status
 
     db = get_db()
     try:
@@ -197,6 +228,8 @@ def search_memory():
                 offset=offset,
                 shared_only=shared_only,
                 private_only=private_only,
+                visibility=visibility,
+                owner_agent_id=owner_agent_id,
             )
         else:
             results = fts_search_memories(
@@ -204,6 +237,8 @@ def search_memory():
                 f'"{safe_q}"',
                 limit=limit,
                 offset=offset,
+                visibility=visibility,
+                owner_agent_id=owner_agent_id,
             )
     except Exception:
         results = []

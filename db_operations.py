@@ -39,13 +39,29 @@ def fts_search_conversations(
 
 
 def fts_search_memories(
-    db: sqlite3.Connection, query: str, limit: int = 20, offset: int = 0
+    db: sqlite3.Connection,
+    query: str,
+    limit: int = 20,
+    offset: int = 0,
+    visibility: str = None,
+    owner_agent_id: str = None,
 ) -> list:
+    filter_predicate, filter_params = _build_memory_filter_predicate(visibility, owner_agent_id)
+    where_clause = "f.fts_memories MATCH ?"
+    query_params = [query]
+
+    if filter_predicate:
+        where_clause = f"{where_clause} AND {filter_predicate}"
+        query_params.extend(filter_params)
+
+    query_params.extend([limit, offset])
     rows = db.execute(
-        "SELECT name, content, description, memory_id"
-        " FROM fts_memories WHERE fts_memories MATCH ?"
-        " LIMIT ? OFFSET ?",
-        (query, limit, offset),
+        f"SELECT m.name, m.content, m.description, m.id "
+        f"FROM memories m "
+        f"INNER JOIN fts_memories f ON f.memory_id = m.id "
+        f"WHERE {where_clause} "
+        f"LIMIT ? OFFSET ?",
+        query_params,
     ).fetchall()
     return [{"name": r[0], "content": r[1], "description": r[2], "memory_id": r[3]} for r in rows]
 
@@ -75,6 +91,47 @@ def _build_scope_predicate(agent_id, shared_only=False, private_only=False):
     )
 
 
+def _build_memory_filter_predicate(visibility=None, owner_agent_id=None):
+    predicates = []
+    bind_params = []
+
+    if visibility is not None:
+        predicates.append("visibility = ?")
+        bind_params.append(visibility)
+
+    if owner_agent_id is not None:
+        predicates.append("owner_agent_id = ?")
+        bind_params.append(owner_agent_id)
+
+    if not predicates:
+        return "", []
+
+    return "(" + " AND ".join(predicates) + ")", bind_params
+
+
+def list_memories(
+    db: sqlite3.Connection,
+    limit: int = 20,
+    offset: int = 0,
+    visibility: str = None,
+    owner_agent_id: str = None,
+) -> list:
+    filter_predicate, filter_params = _build_memory_filter_predicate(visibility, owner_agent_id)
+    where_clause = ""
+    query_params = list(filter_params)
+    if filter_predicate:
+        where_clause = f" WHERE {filter_predicate}"
+
+    query_params.extend([limit, offset])
+    rows = db.execute(
+        f"SELECT id, name, type, content, description, timestamp, confidence, owner_agent_id, visibility "
+        f"FROM memories{where_clause} "
+        f"LIMIT ? OFFSET ?",
+        query_params,
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def list_memories_scoped(
     db: sqlite3.Connection,
     agent_id: str,
@@ -82,9 +139,15 @@ def list_memories_scoped(
     offset: int = 0,
     shared_only: bool = False,
     private_only: bool = False,
+    visibility: str = None,
+    owner_agent_id: str = None,
 ) -> list:
     """List memories with visibility scoping applied."""
     predicate, bind_params = _build_scope_predicate(agent_id, shared_only, private_only)
+    filter_predicate, filter_params = _build_memory_filter_predicate(visibility, owner_agent_id)
+    if filter_predicate:
+        predicate = f"{predicate} AND {filter_predicate}"
+        bind_params.extend(filter_params)
     query_params = bind_params + [limit, offset]
 
     rows = db.execute(
@@ -118,9 +181,15 @@ def fts_search_memories_scoped(
     offset: int = 0,
     shared_only: bool = False,
     private_only: bool = False,
+    visibility: str = None,
+    owner_agent_id: str = None,
 ) -> list:
     """FTS search on memories with visibility scoping."""
     predicate, bind_params = _build_scope_predicate(agent_id, shared_only, private_only)
+    filter_predicate, filter_params = _build_memory_filter_predicate(visibility, owner_agent_id)
+    if filter_predicate:
+        predicate = f"{predicate} AND {filter_predicate}"
+        bind_params.extend(filter_params)
 
     # Build parameter list in correct order: scope params, query, limit, offset
     full_query_params = bind_params + [query, limit, offset]

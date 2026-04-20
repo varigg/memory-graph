@@ -561,3 +561,45 @@ class TestMemoryVisibilityScoping:
 
         with pytest.raises(ValueError, match="Cannot combine"):
             ops._build_scope_predicate("agent-alpha", shared_only=True, private_only=True)
+
+    def test_list_memories_scoped_accepts_visibility_and_owner_filters(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        ops.insert_memory(
+            db, "shared-alpha", "note", "x", "", visibility="shared", owner_agent_id="agent-alpha"
+        )
+        ops.insert_memory(
+            db, "shared-beta", "note", "x", "", visibility="shared", owner_agent_id="agent-beta"
+        )
+        ops.insert_memory(
+            db, "private-alpha", "note", "x", "", visibility="private", owner_agent_id="agent-alpha"
+        )
+
+        results = ops.list_memories_scoped(
+            db,
+            "agent-alpha",
+            limit=100,
+            visibility="shared",
+            owner_agent_id="agent-beta",
+        )
+        names = {r["name"] for r in results}
+        assert names == {"shared-beta"}
+
+    def test_fts_search_memories_unscoped_accepts_owner_filter(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        ops.insert_memory(
+            db, "alpha", "note", "owner-token", "", visibility="shared", owner_agent_id="agent-alpha"
+        )
+        ops.insert_memory(
+            db, "beta", "note", "owner-token", "", visibility="shared", owner_agent_id="agent-beta"
+        )
+
+        results = ops.fts_search_memories(
+            db,
+            '"owner-token"',
+            limit=100,
+            owner_agent_id="agent-alpha",
+        )
+        names = {r["name"] for r in results}
+        assert names == {"alpha"}

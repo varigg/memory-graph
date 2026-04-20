@@ -595,7 +595,7 @@ class TestMemoryReadScoping:
                 json=_memory_payload(
                     name=f"mem-{agent}",
                     visibility="private",
-                    agent_id=f"agent-{agent}",
+                    owner_agent_id=f"agent-{agent}",
                 ),
             )
 
@@ -603,5 +603,75 @@ class TestMemoryReadScoping:
         resp = client.get("/memory/list")
         assert resp.status_code == 200
         # With legacy behavior, both should be visible
-        {m.get("name") for m in resp.get_json()}
+        names = {m.get("name") for m in resp.get_json()}
+        assert "mem-alpha" in names
+        assert "mem-beta" in names
         # This documents current behavior; scoping requires agent_id
+
+    def test_list_rejects_invalid_visibility_filter(self, client):
+        resp = client.get("/memory/list?visibility=team")
+        assert resp.status_code == 400
+        assert "visibility" in resp.get_json().get("error", "").lower()
+
+    def test_list_rejects_blank_owner_filter(self, client):
+        resp = client.get("/memory/list?owner_agent_id=   ")
+        assert resp.status_code == 400
+        assert "owner_agent_id" in resp.get_json().get("error", "")
+
+    def test_list_filters_compose_with_scoped_default(self, client):
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-alpha",
+                owner_agent_id="agent-alpha",
+                visibility="shared",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-beta",
+                owner_agent_id="agent-beta",
+                visibility="shared",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-alpha",
+                owner_agent_id="agent-alpha",
+                visibility="private",
+            ),
+        )
+
+        resp = client.get(
+            "/memory/list?agent_id=agent-alpha&visibility=shared&owner_agent_id=agent-beta"
+        )
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert names == {"shared-beta"}
+
+    def test_search_filters_by_owner_without_agent_id(self, client):
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="alpha-hit",
+                content="shared token",
+                owner_agent_id="agent-alpha",
+                visibility="shared",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="beta-hit",
+                content="shared token",
+                owner_agent_id="agent-beta",
+                visibility="shared",
+            ),
+        )
+
+        resp = client.get("/memory/search?q=token&owner_agent_id=agent-alpha")
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert names == {"alpha-hit"}
