@@ -5,10 +5,14 @@ from db_operations import (
     fts_search_memories_scoped,
     insert_entity,
     insert_memory,
-    transition_memory_status,
 )
 from db_operations import list_memories as list_memories_db
-from db_operations import list_memories_scoped, promote_memory_to_shared
+from db_operations import (
+    list_memories_scoped,
+    promote_memory_to_shared,
+    relate_memory_lifecycle,
+    transition_memory_status,
+)
 from db_utils import get_db
 
 bp = Blueprint("memory", __name__)
@@ -112,6 +116,41 @@ def _transition_memory_lifecycle(target_status):
     return jsonify(transitioned), 200
 
 
+def _relate_memory_lifecycle(relation_type):
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    memory_id = data.get("memory_id")
+    target_memory_id = data.get("target_memory_id")
+    if target_memory_id is None:
+        target_memory_id = data.get("replacement_memory_id")
+
+    agent_id = data.get("agent_id")
+    if not isinstance(memory_id, int):
+        return jsonify({"error": "memory_id must be an integer"}), 400
+    if not isinstance(target_memory_id, int):
+        return jsonify({"error": "target_memory_id must be an integer"}), 400
+    if not isinstance(agent_id, str) or not agent_id.strip():
+        return jsonify({"error": "agent_id is required"}), 400
+
+    db = get_db()
+    related, err = relate_memory_lifecycle(
+        db,
+        memory_id,
+        target_memory_id,
+        agent_id.strip(),
+        relation_type,
+    )
+    if err in {"source_not_found", "target_not_found"}:
+        return jsonify({"error": "not found"}), 404
+    if err == "forbidden":
+        return jsonify({"error": "forbidden"}), 403
+    if err in {"same_memory", "invalid_transition", "invalid_relation"}:
+        return jsonify({"error": "invalid transition"}), 409
+    return jsonify(related), 200
+
+
 # ---------------------------------------------------------------------------
 # Memory routes
 # ---------------------------------------------------------------------------
@@ -170,6 +209,16 @@ def archive_memory():
 @bp.route("/memory/invalidate", methods=["POST"])
 def invalidate_memory():
     return _transition_memory_lifecycle("invalidated")
+
+
+@bp.route("/memory/merge", methods=["POST"])
+def merge_memory():
+    return _relate_memory_lifecycle("merged_into")
+
+
+@bp.route("/memory/supersede", methods=["POST"])
+def supersede_memory():
+    return _relate_memory_lifecycle("superseded_by")
 
 
 @bp.route("/memory/list", methods=["GET"])

@@ -154,8 +154,9 @@ Related implementation breakdown:
 - async queue architecture for embedding/enrichment
 - bulk mutation APIs
 - cursor pagination migration
-- merge/supersede automation
 - enterprise auth/tenant controls
+- ranking explainability fields in search results (`rank_components`, `match_reasons`)
+- additional retrieval filters: `min_confidence`, `updated_since`, `tags`
 
 ## Suggested Sprint Order
 

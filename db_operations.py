@@ -335,6 +335,95 @@ def transition_memory_status(
     return {"id": row[0], "status": target_status}, None
 
 
+def relate_memory_lifecycle(
+    db: sqlite3.Connection,
+    memory_id: int,
+    target_memory_id: int,
+    requester_agent_id: str,
+    relation_type: str,
+):
+    """Create lifecycle relation and transition source memory status.
+
+    Supported relation types:
+    - merged_into: source transitions to archived
+    - superseded_by: source transitions to invalidated
+    """
+    if memory_id == target_memory_id:
+        return None, "same_memory"
+
+    if relation_type not in {"merged_into", "superseded_by"}:
+        return None, "invalid_relation"
+
+    source_row = db.execute(
+        "SELECT id, owner_agent_id, visibility, status FROM memories WHERE id = ?",
+        (memory_id,),
+    ).fetchone()
+    if source_row is None:
+        return None, "source_not_found"
+
+    target_row = db.execute(
+        "SELECT id, owner_agent_id, visibility, status FROM memories WHERE id = ?",
+        (target_memory_id,),
+    ).fetchone()
+    if target_row is None:
+        return None, "target_not_found"
+
+    if source_row[1] != requester_agent_id:
+        return None, "forbidden"
+
+    # Target must be visible to requester: shared or requester's private.
+    if target_row[2] == "private" and target_row[1] != requester_agent_id:
+        return None, "forbidden"
+
+    source_status = source_row[3] or "active"
+    target_status = target_row[3] or "active"
+    if source_status != "active" or target_status != "active":
+        return None, "invalid_transition"
+
+    existing = db.execute(
+        "SELECT id FROM memory_relations "
+        "WHERE source_memory_id = ? AND target_memory_id = ? AND relation_type = ?",
+        (memory_id, target_memory_id, relation_type),
+    ).fetchone()
+
+    if existing is not None:
+        source_status_value = "archived" if relation_type == "merged_into" else "invalidated"
+        return {
+            "source_memory_id": memory_id,
+            "target_memory_id": target_memory_id,
+            "relation_type": relation_type,
+            "source_status": source_status_value,
+        }, None
+
+    source_status_value = "archived" if relation_type == "merged_into" else "invalidated"
+
+    db.execute(
+        "INSERT INTO memory_relations ("
+        "source_memory_id, target_memory_id, relation_type, actor_agent_id"
+        ") VALUES (?, ?, ?, ?)",
+        (memory_id, target_memory_id, relation_type, requester_agent_id),
+    )
+    db.execute(
+        "UPDATE memories "
+        "SET status = ?, updated_at = CURRENT_TIMESTAMP, status_updated_at = CURRENT_TIMESTAMP "
+        "WHERE id = ?",
+        (source_status_value, memory_id),
+    )
+    db.execute(
+        "UPDATE memories "
+        "SET updated_at = CURRENT_TIMESTAMP "
+        "WHERE id = ?",
+        (target_memory_id,),
+    )
+    db.commit()
+    return {
+        "source_memory_id": memory_id,
+        "target_memory_id": target_memory_id,
+        "relation_type": relation_type,
+        "source_status": source_status_value,
+    }, None
+
+
 def insert_entity(
     db: sqlite3.Connection,
     name: str,

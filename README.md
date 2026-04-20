@@ -215,9 +215,8 @@ Phase 3 starts with multi-agent memory usability for local trusted agents
   - Read semantics: default to `shared + own-private`
   - Promote flow: private memory can be promoted to shared
   - API and schema additions for visibility filtering now active
-- **3B Retrieval Quality + Lifecycle (partially implemented, partially required)**
-  - Implemented: visibility/owner/status filters, archive/invalidate lifecycle operations, and memory ranking hints
-  - Planned: merge/supersede operations
+- **3B Retrieval Quality + Lifecycle (implemented)**
+  - Visibility/owner/status filters, archive/invalidate/merge/supersede lifecycle operations, and memory ranking hints
 - **3C Scale + Ops (planned, mostly optional/defer for current scale)**
   - Async enrichment pipeline and queueing
   - Cursor pagination for larger recall workloads

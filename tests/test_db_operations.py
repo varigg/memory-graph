@@ -704,3 +704,116 @@ class TestMemoryVisibilityScoping:
         results = ops.fts_search_memories_scoped(db, '"rank-token"', "agent-alpha", limit=100)
         names = [r["name"] for r in results]
         assert names[:3] == ["newer-high", "older-high", "newer-low"]
+
+
+class TestMemoryLifecycleRelations:
+    def test_merge_archives_source_and_inserts_relation(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        source_id = ops.insert_memory(
+            db, "source", "note", "content", "", visibility="private", owner_agent_id="agent-alpha"
+        )
+        target_id = ops.insert_memory(
+            db, "target", "note", "content", "", visibility="shared", owner_agent_id="agent-beta"
+        )
+
+        related, err = ops.relate_memory_lifecycle(
+            db,
+            source_id,
+            target_id,
+            "agent-alpha",
+            "merged_into",
+        )
+        assert err is None
+        assert related["source_status"] == "archived"
+
+        source_status = db.execute(
+            "SELECT status FROM memories WHERE id = ?",
+            (source_id,),
+        ).fetchone()[0]
+        assert source_status == "archived"
+
+        relation = db.execute(
+            "SELECT relation_type FROM memory_relations "
+            "WHERE source_memory_id = ? AND target_memory_id = ?",
+            (source_id, target_id),
+        ).fetchone()
+        assert relation is not None
+        assert relation[0] == "merged_into"
+
+    def test_supersede_invalidates_source(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        source_id = ops.insert_memory(
+            db, "old", "note", "content", "", visibility="private", owner_agent_id="agent-alpha"
+        )
+        target_id = ops.insert_memory(
+            db, "new", "note", "content", "", visibility="private", owner_agent_id="agent-alpha"
+        )
+
+        related, err = ops.relate_memory_lifecycle(
+            db,
+            source_id,
+            target_id,
+            "agent-alpha",
+            "superseded_by",
+        )
+        assert err is None
+        assert related["source_status"] == "invalidated"
+
+    def test_relation_rejects_same_memory(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        source_id = ops.insert_memory(
+            db, "self", "note", "content", "", visibility="private", owner_agent_id="agent-alpha"
+        )
+
+        related, err = ops.relate_memory_lifecycle(
+            db,
+            source_id,
+            source_id,
+            "agent-alpha",
+            "merged_into",
+        )
+        assert related is None
+        assert err == "same_memory"
+
+    def test_relation_rejects_private_target_of_other_agent(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        source_id = ops.insert_memory(
+            db, "source", "note", "content", "", visibility="private", owner_agent_id="agent-alpha"
+        )
+        target_id = ops.insert_memory(
+            db, "target", "note", "content", "", visibility="private", owner_agent_id="agent-beta"
+        )
+
+        related, err = ops.relate_memory_lifecycle(
+            db,
+            source_id,
+            target_id,
+            "agent-alpha",
+            "merged_into",
+        )
+        assert related is None
+        assert err == "forbidden"
+
+    def test_relation_rejects_non_owner_source(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        source_id = ops.insert_memory(
+            db, "source", "note", "content", "", visibility="private", owner_agent_id="agent-alpha"
+        )
+        target_id = ops.insert_memory(
+            db, "target", "note", "content", "", visibility="shared", owner_agent_id="agent-beta"
+        )
+
+        related, err = ops.relate_memory_lifecycle(
+            db,
+            source_id,
+            target_id,
+            "agent-beta",
+            "merged_into",
+        )
+        assert related is None
+        assert err == "forbidden"

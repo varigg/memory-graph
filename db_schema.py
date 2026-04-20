@@ -65,6 +65,18 @@ CREATE TABLE IF NOT EXISTS kv_store (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS memory_relations (
+    id               INTEGER PRIMARY KEY,
+    source_memory_id INTEGER NOT NULL,
+    target_memory_id INTEGER NOT NULL,
+    relation_type    TEXT NOT NULL CHECK (relation_type IN ('merged_into', 'superseded_by')),
+    actor_agent_id   TEXT NOT NULL,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_memory_id, target_memory_id, relation_type),
+    FOREIGN KEY(source_memory_id) REFERENCES memories(id) ON DELETE CASCADE,
+    FOREIGN KEY(target_memory_id) REFERENCES memories(id) ON DELETE CASCADE
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS fts_conversations
     USING fts5(content, role, channel, conversation_id UNINDEXED);
 
@@ -230,6 +242,14 @@ def init(db_path: str) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_memories_status_updated_at "
         "ON memories(status_updated_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_relations_source "
+        "ON memory_relations(source_memory_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_relations_target "
+        "ON memory_relations(target_memory_id)"
     )
     conn.executemany(
         "INSERT OR IGNORE INTO importance_keywords (keyword, score) VALUES (?, ?)",

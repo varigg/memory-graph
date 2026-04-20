@@ -378,6 +378,141 @@ def test_archive_rejected_after_invalidation(client):
 
 
 # ---------------------------------------------------------------------------
+# POST /memory/merge and /memory/supersede
+# ---------------------------------------------------------------------------
+
+def test_merge_memory_returns_200_for_valid_relation(client):
+    source_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-source", visibility="private"),
+    ).get_json()["id"]
+    target_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-target", visibility="shared", owner_agent_id="agent-beta"),
+    ).get_json()["id"]
+
+    merge = client.post(
+        "/memory/merge",
+        json={
+            "memory_id": source_id,
+            "target_memory_id": target_id,
+            "agent_id": "agent-alpha",
+        },
+    )
+    assert merge.status_code == 200
+    data = merge.get_json()
+    assert data["source_memory_id"] == source_id
+    assert data["target_memory_id"] == target_id
+    assert data["relation_type"] == "merged_into"
+    assert data["source_status"] == "archived"
+
+    archived_items = client.get("/memory/list?status=archived").get_json()
+    assert any(item["id"] == source_id for item in archived_items)
+
+
+def test_merge_memory_rejects_same_source_and_target(client):
+    source_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-self", visibility="private"),
+    ).get_json()["id"]
+
+    merge = client.post(
+        "/memory/merge",
+        json={
+            "memory_id": source_id,
+            "target_memory_id": source_id,
+            "agent_id": "agent-alpha",
+        },
+    )
+    assert merge.status_code == 409
+
+
+def test_merge_memory_returns_403_when_source_not_owned_by_agent(client):
+    source_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-owned-by-alpha", visibility="private", owner_agent_id="agent-alpha"),
+    ).get_json()["id"]
+    target_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-target-shared", visibility="shared", owner_agent_id="agent-beta"),
+    ).get_json()["id"]
+
+    merge = client.post(
+        "/memory/merge",
+        json={
+            "memory_id": source_id,
+            "target_memory_id": target_id,
+            "agent_id": "agent-beta",
+        },
+    )
+    assert merge.status_code == 403
+
+
+def test_merge_memory_returns_403_when_target_private_of_other_agent(client):
+    source_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-source-private", visibility="private", owner_agent_id="agent-alpha"),
+    ).get_json()["id"]
+    target_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-target-private", visibility="private", owner_agent_id="agent-beta"),
+    ).get_json()["id"]
+
+    merge = client.post(
+        "/memory/merge",
+        json={
+            "memory_id": source_id,
+            "target_memory_id": target_id,
+            "agent_id": "agent-alpha",
+        },
+    )
+    assert merge.status_code == 403
+
+
+def test_supersede_memory_returns_200_and_invalidates_source(client):
+    source_id = client.post(
+        "/memory",
+        json=_memory_payload(name="supersede-old", visibility="private"),
+    ).get_json()["id"]
+    replacement_id = client.post(
+        "/memory",
+        json=_memory_payload(name="supersede-new", visibility="private"),
+    ).get_json()["id"]
+
+    supersede = client.post(
+        "/memory/supersede",
+        json={
+            "memory_id": source_id,
+            "replacement_memory_id": replacement_id,
+            "agent_id": "agent-alpha",
+        },
+    )
+    assert supersede.status_code == 200
+    data = supersede.get_json()
+    assert data["relation_type"] == "superseded_by"
+    assert data["source_status"] == "invalidated"
+
+    invalidated_items = client.get("/memory/list?status=invalidated").get_json()
+    assert any(item["id"] == source_id for item in invalidated_items)
+
+
+def test_supersede_memory_requires_target_memory_id(client):
+    source_id = client.post(
+        "/memory",
+        json=_memory_payload(name="supersede-missing-target", visibility="private"),
+    ).get_json()["id"]
+
+    supersede = client.post(
+        "/memory/supersede",
+        json={
+            "memory_id": source_id,
+            "agent_id": "agent-alpha",
+        },
+    )
+    assert supersede.status_code == 400
+
+
+# ---------------------------------------------------------------------------
 # POST /entity
 # ---------------------------------------------------------------------------
 
