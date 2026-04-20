@@ -142,13 +142,63 @@ def _dedupe_embeddings_by_text(conn: sqlite3.Connection) -> None:
         )
 
 
+def _get_table_columns(conn: sqlite3.Connection, table: str) -> set:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {row[1] for row in rows}
+
+
+def _ensure_memories_scope_columns(conn: sqlite3.Connection) -> None:
+    cols = _get_table_columns(conn, "memories")
+
+    if "owner_agent_id" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN owner_agent_id TEXT NOT NULL DEFAULT 'unknown'"
+        )
+
+    if "visibility" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN visibility TEXT NOT NULL DEFAULT 'shared' "
+            "CHECK (visibility IN ('shared', 'private'))"
+        )
+
+    if "updated_at" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN updated_at DATETIME"
+        )
+
+    conn.execute(
+        "UPDATE memories "
+        "SET owner_agent_id = COALESCE(NULLIF(TRIM(owner_agent_id), ''), 'unknown')"
+    )
+    conn.execute(
+        "UPDATE memories "
+        "SET visibility = CASE WHEN visibility IN ('shared', 'private') THEN visibility ELSE 'shared' END"
+    )
+    conn.execute(
+        "UPDATE memories "
+        "SET updated_at = COALESCE(updated_at, timestamp, CURRENT_TIMESTAMP)"
+    )
+
+
 def init(db_path: str) -> None:
     conn = sqlite3.connect(db_path)
     conn.executescript(_DDL)
+    _ensure_memories_scope_columns(conn)
     _dedupe_embeddings_by_text(conn)
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_embeddings_text_unique "
         "ON embeddings(text)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memories_visibility_owner "
+        "ON memories(visibility, owner_agent_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memories_updated_at "
+        "ON memories(updated_at)"
     )
     conn.executemany(
         "INSERT OR IGNORE INTO importance_keywords (keyword, score) VALUES (?, ?)",

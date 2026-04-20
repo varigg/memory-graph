@@ -237,7 +237,17 @@ class TestConversationsColumns:
 # ---------------------------------------------------------------------------
 
 class TestMemoriesColumns:
-    EXPECTED = {"name", "type", "content", "description", "timestamp", "confidence"}
+    EXPECTED = {
+        "name",
+        "type",
+        "content",
+        "description",
+        "timestamp",
+        "confidence",
+        "owner_agent_id",
+        "visibility",
+        "updated_at",
+    }
 
     def test_memories_has_all_required_columns(self, tmp_path):
         import db_schema  # noqa: PLC0415
@@ -265,6 +275,33 @@ class TestMemoriesColumns:
         cols = _get_column_names(conn, "memories")
         conn.close()
         assert "type" in cols
+
+    def test_memories_has_owner_agent_id_column(self, tmp_path):
+        import db_schema  # noqa: PLC0415
+        db_path = str(tmp_path / "test.db")
+        db_schema.init(db_path)
+        conn = sqlite3.connect(db_path)
+        cols = _get_column_names(conn, "memories")
+        conn.close()
+        assert "owner_agent_id" in cols
+
+    def test_memories_has_visibility_column(self, tmp_path):
+        import db_schema  # noqa: PLC0415
+        db_path = str(tmp_path / "test.db")
+        db_schema.init(db_path)
+        conn = sqlite3.connect(db_path)
+        cols = _get_column_names(conn, "memories")
+        conn.close()
+        assert "visibility" in cols
+
+    def test_memories_has_updated_at_column(self, tmp_path):
+        import db_schema  # noqa: PLC0415
+        db_path = str(tmp_path / "test.db")
+        db_schema.init(db_path)
+        conn = sqlite3.connect(db_path)
+        cols = _get_column_names(conn, "memories")
+        conn.close()
+        assert "updated_at" in cols
 
 
 # ---------------------------------------------------------------------------
@@ -434,3 +471,73 @@ class TestEmbeddingsTextUniqueness:
         assert emb_count == 1
         assert len(conv_refs) == 1
         assert "idx_embeddings_text_unique" in indexes
+
+
+# ---------------------------------------------------------------------------
+# memories scope migration safety
+# ---------------------------------------------------------------------------
+
+class TestMemoriesScopeMigration:
+    def test_scope_indexes_exist_after_init(self, tmp_path):
+        import db_schema  # noqa: PLC0415
+
+        db_path = str(tmp_path / "test.db")
+        db_schema.init(db_path)
+        conn = sqlite3.connect(db_path)
+        indexes = _get_index_names(conn, "memories")
+        conn.close()
+
+        assert "idx_memories_visibility_owner" in indexes
+        assert "idx_memories_updated_at" in indexes
+
+    def test_init_backfills_scope_defaults_on_legacy_rows(self, tmp_path):
+        import db_schema  # noqa: PLC0415
+
+        db_path = str(tmp_path / "test.db")
+        db_schema.init(db_path)
+
+        conn = sqlite3.connect(db_path)
+        conn.execute("DROP INDEX IF EXISTS idx_memories_visibility_owner")
+        conn.execute("DROP INDEX IF EXISTS idx_memories_updated_at")
+
+        conn.execute(
+            "CREATE TABLE memories_legacy ("
+            "id INTEGER PRIMARY KEY, "
+            "name TEXT, "
+            "type TEXT, "
+            "content TEXT, "
+            "description TEXT, "
+            "timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, "
+            "confidence REAL DEFAULT 1.0"
+            ")"
+        )
+        conn.execute(
+            "INSERT INTO memories_legacy (id, name, type, content, description, timestamp, confidence) "
+            "SELECT id, name, type, content, description, timestamp, confidence FROM memories"
+        )
+        conn.execute("DROP TABLE memories")
+        conn.execute("ALTER TABLE memories_legacy RENAME TO memories")
+
+        conn.execute(
+            "INSERT INTO memories (name, type, content, description) VALUES (?, ?, ?, ?)",
+            ("legacy", "note", "legacy-content", ""),
+        )
+        conn.commit()
+        conn.close()
+
+        db_schema.init(db_path)
+
+        conn = sqlite3.connect(db_path)
+        row = conn.execute(
+            "SELECT owner_agent_id, visibility, updated_at FROM memories WHERE name = ?",
+            ("legacy",),
+        ).fetchone()
+        indexes = _get_index_names(conn, "memories")
+        conn.close()
+
+        assert row is not None
+        assert row[0] == "unknown"
+        assert row[1] == "shared"
+        assert row[2] is not None
+        assert "idx_memories_visibility_owner" in indexes
+        assert "idx_memories_updated_at" in indexes
