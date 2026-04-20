@@ -289,6 +289,95 @@ def test_promote_memory_returns_403_for_non_owner(client):
 
 
 # ---------------------------------------------------------------------------
+# POST /memory/archive and /memory/invalidate
+# ---------------------------------------------------------------------------
+
+def test_archive_memory_returns_200_for_owner(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="archive-me", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    archive = client.post(
+        "/memory/archive",
+        json={"memory_id": memory_id, "agent_id": "agent-alpha"},
+    )
+    assert archive.status_code == 200
+    assert archive.get_json()["status"] == "archived"
+
+
+def test_invalidate_memory_returns_200_for_owner(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="invalidate-me", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    invalidate = client.post(
+        "/memory/invalidate",
+        json={"memory_id": memory_id, "agent_id": "agent-alpha"},
+    )
+    assert invalidate.status_code == 200
+    assert invalidate.get_json()["status"] == "invalidated"
+
+
+def test_archive_memory_requires_json_body(client):
+    resp = client.post("/memory/archive")
+    assert resp.status_code == 400
+
+
+def test_archive_memory_requires_integer_memory_id(client):
+    resp = client.post(
+        "/memory/archive",
+        json={"memory_id": "1", "agent_id": "agent-alpha"},
+    )
+    assert resp.status_code == 400
+
+
+def test_archive_memory_returns_403_for_non_owner(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="archive-private", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    archive = client.post(
+        "/memory/archive",
+        json={"memory_id": memory_id, "agent_id": "agent-beta"},
+    )
+    assert archive.status_code == 403
+
+
+def test_archive_memory_returns_404_for_unknown_memory(client):
+    resp = client.post(
+        "/memory/archive",
+        json={"memory_id": 999999, "agent_id": "agent-alpha"},
+    )
+    assert resp.status_code == 404
+
+
+def test_archive_rejected_after_invalidation(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="invalidate-then-archive", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    invalidate = client.post(
+        "/memory/invalidate",
+        json={"memory_id": memory_id, "agent_id": "agent-alpha"},
+    )
+    assert invalidate.status_code == 200
+
+    archive = client.post(
+        "/memory/archive",
+        json={"memory_id": memory_id, "agent_id": "agent-alpha"},
+    )
+    assert archive.status_code == 409
+
+
+# ---------------------------------------------------------------------------
 # POST /entity
 # ---------------------------------------------------------------------------
 
@@ -675,3 +764,55 @@ class TestMemoryReadScoping:
         assert resp.status_code == 200
         names = {m.get("name") for m in resp.get_json()}
         assert names == {"alpha-hit"}
+
+    def test_default_reads_exclude_archived(self, client):
+        create = client.post(
+            "/memory",
+            json=_memory_payload(
+                name="becomes-archived",
+                content="status-token",
+                owner_agent_id="agent-alpha",
+                visibility="shared",
+            ),
+        )
+        memory_id = create.get_json()["id"]
+        archive = client.post(
+            "/memory/archive",
+            json={"memory_id": memory_id, "agent_id": "agent-alpha"},
+        )
+        assert archive.status_code == 200
+
+        list_resp = client.get("/memory/list?agent_id=agent-alpha")
+        list_names = {m.get("name") for m in list_resp.get_json()}
+        assert "becomes-archived" not in list_names
+
+        search_resp = client.get("/memory/search?q=status-token&agent_id=agent-alpha")
+        search_names = {m.get("name") for m in search_resp.get_json()}
+        assert "becomes-archived" not in search_names
+
+    def test_status_filter_allows_archived_reads(self, client):
+        create = client.post(
+            "/memory",
+            json=_memory_payload(
+                name="archived-visible",
+                content="archived-token",
+                owner_agent_id="agent-alpha",
+                visibility="shared",
+            ),
+        )
+        memory_id = create.get_json()["id"]
+        archive = client.post(
+            "/memory/archive",
+            json={"memory_id": memory_id, "agent_id": "agent-alpha"},
+        )
+        assert archive.status_code == 200
+
+        list_resp = client.get("/memory/list?agent_id=agent-alpha&status=archived")
+        list_names = {m.get("name") for m in list_resp.get_json()}
+        assert "archived-visible" in list_names
+
+        search_resp = client.get(
+            "/memory/search?q=archived-token&agent_id=agent-alpha&status=archived"
+        )
+        search_names = {m.get("name") for m in search_resp.get_json()}
+        assert "archived-visible" in search_names

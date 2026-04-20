@@ -5,10 +5,10 @@ from db_operations import (
     fts_search_memories_scoped,
     insert_entity,
     insert_memory,
-    list_memories as list_memories_db,
-    list_memories_scoped,
-    promote_memory_to_shared,
+    transition_memory_status,
 )
+from db_operations import list_memories as list_memories_db
+from db_operations import list_memories_scoped, promote_memory_to_shared
 from db_utils import get_db
 
 bp = Blueprint("memory", __name__)
@@ -51,15 +51,65 @@ def _parse_scope_flags():
 def _parse_read_filters():
     visibility = request.args.get("visibility")
     owner_agent_id = request.args.get("owner_agent_id")
+    status = request.args.get("status", "active")
 
     if visibility is not None and visibility not in {"shared", "private"}:
-        return None, None, jsonify({"error": "visibility must be 'shared' or 'private'"}), 400
+        return (
+            None,
+            None,
+            None,
+            jsonify({"error": "visibility must be 'shared' or 'private'"}),
+            400,
+        )
+
+    if status not in {"active", "archived", "invalidated"}:
+        return (
+            None,
+            None,
+            None,
+            jsonify({"error": "status must be 'active', 'archived', or 'invalidated'"}),
+            400,
+        )
 
     if owner_agent_id is not None and not owner_agent_id.strip():
-        return None, None, jsonify({"error": "owner_agent_id must be non-empty"}), 400
+        return (
+            None,
+            None,
+            None,
+            jsonify({"error": "owner_agent_id must be non-empty"}),
+            400,
+        )
 
     normalized_owner = owner_agent_id.strip() if owner_agent_id is not None else None
-    return visibility, normalized_owner, None, None
+    return visibility, normalized_owner, status, None, None
+
+
+def _transition_memory_lifecycle(target_status):
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    memory_id = data.get("memory_id")
+    agent_id = data.get("agent_id")
+    if not isinstance(memory_id, int):
+        return jsonify({"error": "memory_id must be an integer"}), 400
+    if not isinstance(agent_id, str) or not agent_id.strip():
+        return jsonify({"error": "agent_id is required"}), 400
+
+    db = get_db()
+    transitioned, err = transition_memory_status(
+        db,
+        memory_id,
+        agent_id.strip(),
+        target_status,
+    )
+    if err == "not_found":
+        return jsonify({"error": "not found"}), 404
+    if err == "forbidden":
+        return jsonify({"error": "forbidden"}), 403
+    if err == "invalid_transition":
+        return jsonify({"error": "invalid transition"}), 409
+    return jsonify(transitioned), 200
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +162,16 @@ def promote_memory(memory_id):
     return jsonify(promoted), 200
 
 
+@bp.route("/memory/archive", methods=["POST"])
+def archive_memory():
+    return _transition_memory_lifecycle("archived")
+
+
+@bp.route("/memory/invalidate", methods=["POST"])
+def invalidate_memory():
+    return _transition_memory_lifecycle("invalidated")
+
+
 @bp.route("/memory/list", methods=["GET"])
 def list_memories():
     limit, offset, err_resp, err_status = _parse_limit_offset()
@@ -122,7 +182,7 @@ def list_memories():
     shared_only, private_only, err_resp, err_status = _parse_scope_flags()
     if err_resp is not None:
         return err_resp, err_status
-    visibility, owner_agent_id, err_resp, err_status = _parse_read_filters()
+    visibility, owner_agent_id, status, err_resp, err_status = _parse_read_filters()
     if err_resp is not None:
         return err_resp, err_status
 
@@ -139,11 +199,12 @@ def list_memories():
             private_only,
             visibility,
             owner_agent_id,
+            status,
         )
         return jsonify(rows)
 
     # Legacy behavior: no scoping if agent_id not provided
-    rows = list_memories_db(db, limit, offset, visibility, owner_agent_id)
+    rows = list_memories_db(db, limit, offset, visibility, owner_agent_id, status)
     return jsonify(rows)
 
 
@@ -163,7 +224,7 @@ def recall_memory():
     shared_only, private_only, err_resp, err_status = _parse_scope_flags()
     if err_resp is not None:
         return err_resp, err_status
-    visibility, owner_agent_id, err_resp, err_status = _parse_read_filters()
+    visibility, owner_agent_id, status, err_resp, err_status = _parse_read_filters()
     if err_resp is not None:
         return err_resp, err_status
 
@@ -181,6 +242,7 @@ def recall_memory():
                 private_only=private_only,
                 visibility=visibility,
                 owner_agent_id=owner_agent_id,
+                status=status,
             )
         else:
             results = fts_search_memories(
@@ -190,6 +252,7 @@ def recall_memory():
                 offset=offset,
                 visibility=visibility,
                 owner_agent_id=owner_agent_id,
+                status=status,
             )
     except Exception:
         results = []
@@ -212,7 +275,7 @@ def search_memory():
     shared_only, private_only, err_resp, err_status = _parse_scope_flags()
     if err_resp is not None:
         return err_resp, err_status
-    visibility, owner_agent_id, err_resp, err_status = _parse_read_filters()
+    visibility, owner_agent_id, status, err_resp, err_status = _parse_read_filters()
     if err_resp is not None:
         return err_resp, err_status
 
@@ -230,6 +293,7 @@ def search_memory():
                 private_only=private_only,
                 visibility=visibility,
                 owner_agent_id=owner_agent_id,
+                status=status,
             )
         else:
             results = fts_search_memories(
@@ -239,6 +303,7 @@ def search_memory():
                 offset=offset,
                 visibility=visibility,
                 owner_agent_id=owner_agent_id,
+                status=status,
             )
     except Exception:
         results = []

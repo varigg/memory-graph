@@ -23,12 +23,15 @@ This file maps Phase 3 work to the intended deployment profile:
 
 ### Phase 3B — Retrieval Quality + Lifecycle
 
-- **Status**: Planned
+- **Status**: In Progress
 - **Fit**: **Partially required**
 - **Why**: Utility gains are significant even at low scale, but scope can be
   intentionally trimmed.
 - **Minimum deliverable**:
   - confidence + recency ranking hints
+  - visibility/owner/status filters
+  - archive/invalidate endpoints
+- **Implemented so far**:
   - visibility/owner/status filters
   - archive/invalidate endpoints
 - **Can defer**:

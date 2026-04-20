@@ -1,4 +1,4 @@
-# Phase 3B — Retrieval Quality and Memory Lifecycle (Planned)
+# Phase 3B — Retrieval Quality and Memory Lifecycle (Partially Implemented)
 
 ## Goal
 
@@ -19,22 +19,28 @@ Improve utility of retrieved context and keep memory quality high over time.
 
 ### 2) Lifecycle Operations
 
-Add memory lifecycle APIs:
+Implemented lifecycle APIs:
+
+- `POST /memory/archive`
+- `POST /memory/invalidate`
+
+Still planned:
 
 - `POST /memory/merge`
 - `POST /memory/supersede`
-- `POST /memory/archive`
-- `POST /memory/invalidate`
 
 These prevent memory sprawl and preserve high-signal shared memory.
 
 ### 3) Retrieval Filters
 
-Add optional filters to memory list/search/recall:
+Implemented optional filters on memory list/search/recall:
 
 - `visibility`
 - `owner_agent_id`
 - `status`
+
+Still planned:
+
 - `min_confidence`
 - `updated_since`
 - `tags` (if tags are introduced)
@@ -63,3 +69,13 @@ Add optional filters to memory list/search/recall:
 - Scoped retrieval produces measurably higher-quality context.
 - Lifecycle controls prevent duplicate/stale shared memories from accumulating.
 - Full test suite remains green.
+
+## Current Phase State
+
+- Done in this phase so far:
+  - lifecycle transitions: `active -> archived|invalidated`
+  - owner-checked `archive` and `invalidate` endpoints
+  - retrieval status filter with default `active`
+- Remaining for full 3B:
+  - recency/confidence-aware ranking changes
+  - merge/supersede lifecycle operations

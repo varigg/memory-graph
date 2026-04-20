@@ -45,8 +45,11 @@ def fts_search_memories(
     offset: int = 0,
     visibility: str = None,
     owner_agent_id: str = None,
+    status: str = "active",
 ) -> list:
-    filter_predicate, filter_params = _build_memory_filter_predicate(visibility, owner_agent_id)
+    filter_predicate, filter_params = _build_memory_filter_predicate(
+        visibility, owner_agent_id, status
+    )
     where_clause = "f.fts_memories MATCH ?"
     query_params = [query]
 
@@ -91,7 +94,7 @@ def _build_scope_predicate(agent_id, shared_only=False, private_only=False):
     )
 
 
-def _build_memory_filter_predicate(visibility=None, owner_agent_id=None):
+def _build_memory_filter_predicate(visibility=None, owner_agent_id=None, status="active"):
     predicates = []
     bind_params = []
 
@@ -102,6 +105,10 @@ def _build_memory_filter_predicate(visibility=None, owner_agent_id=None):
     if owner_agent_id is not None:
         predicates.append("owner_agent_id = ?")
         bind_params.append(owner_agent_id)
+
+    if status is not None:
+        predicates.append("status = ?")
+        bind_params.append(status)
 
     if not predicates:
         return "", []
@@ -115,8 +122,11 @@ def list_memories(
     offset: int = 0,
     visibility: str = None,
     owner_agent_id: str = None,
+    status: str = "active",
 ) -> list:
-    filter_predicate, filter_params = _build_memory_filter_predicate(visibility, owner_agent_id)
+    filter_predicate, filter_params = _build_memory_filter_predicate(
+        visibility, owner_agent_id, status
+    )
     where_clause = ""
     query_params = list(filter_params)
     if filter_predicate:
@@ -124,7 +134,7 @@ def list_memories(
 
     query_params.extend([limit, offset])
     rows = db.execute(
-        f"SELECT id, name, type, content, description, timestamp, confidence, owner_agent_id, visibility "
+        f"SELECT id, name, type, content, description, timestamp, confidence, owner_agent_id, visibility, status "
         f"FROM memories{where_clause} "
         f"LIMIT ? OFFSET ?",
         query_params,
@@ -141,10 +151,13 @@ def list_memories_scoped(
     private_only: bool = False,
     visibility: str = None,
     owner_agent_id: str = None,
+    status: str = "active",
 ) -> list:
     """List memories with visibility scoping applied."""
     predicate, bind_params = _build_scope_predicate(agent_id, shared_only, private_only)
-    filter_predicate, filter_params = _build_memory_filter_predicate(visibility, owner_agent_id)
+    filter_predicate, filter_params = _build_memory_filter_predicate(
+        visibility, owner_agent_id, status
+    )
     if filter_predicate:
         predicate = f"{predicate} AND {filter_predicate}"
         bind_params.extend(filter_params)
@@ -152,7 +165,7 @@ def list_memories_scoped(
 
     rows = db.execute(
         f"SELECT id, name, type, content, description, timestamp, confidence, "
-        f"owner_agent_id, visibility FROM memories "
+        f"owner_agent_id, visibility, status FROM memories "
         f"WHERE {predicate} "
         f"LIMIT ? OFFSET ?",
         query_params,
@@ -168,6 +181,7 @@ def list_memories_scoped(
             "confidence": r[6],
             "owner_agent_id": r[7],
             "visibility": r[8],
+            "status": r[9],
         }
         for r in rows
     ]
@@ -183,10 +197,13 @@ def fts_search_memories_scoped(
     private_only: bool = False,
     visibility: str = None,
     owner_agent_id: str = None,
+    status: str = "active",
 ) -> list:
     """FTS search on memories with visibility scoping."""
     predicate, bind_params = _build_scope_predicate(agent_id, shared_only, private_only)
-    filter_predicate, filter_params = _build_memory_filter_predicate(visibility, owner_agent_id)
+    filter_predicate, filter_params = _build_memory_filter_predicate(
+        visibility, owner_agent_id, status
+    )
     if filter_predicate:
         predicate = f"{predicate} AND {filter_predicate}"
         bind_params.extend(filter_params)
@@ -268,6 +285,43 @@ def promote_memory_to_shared(
     )
     db.commit()
     return {"id": row[0], "visibility": "shared"}, None
+
+
+def transition_memory_status(
+    db: sqlite3.Connection,
+    memory_id: int,
+    requester_agent_id: str,
+    target_status: str,
+):
+    row = db.execute(
+        "SELECT id, owner_agent_id, status FROM memories WHERE id = ?",
+        (memory_id,),
+    ).fetchone()
+    if row is None:
+        return None, "not_found"
+    if row[1] != requester_agent_id:
+        return None, "forbidden"
+
+    current_status = row[2] or "active"
+    if current_status == target_status:
+        return {"id": row[0], "status": current_status}, None
+
+    if target_status not in {"archived", "invalidated"}:
+        return None, "invalid_status"
+
+    if current_status == "invalidated":
+        return None, "invalid_transition"
+    if current_status == "archived" and target_status == "archived":
+        return {"id": row[0], "status": current_status}, None
+
+    db.execute(
+        "UPDATE memories "
+        "SET status = ?, updated_at = CURRENT_TIMESTAMP, status_updated_at = CURRENT_TIMESTAMP "
+        "WHERE id = ?",
+        (target_status, memory_id),
+    )
+    db.commit()
+    return {"id": row[0], "status": target_status}, None
 
 
 def insert_entity(

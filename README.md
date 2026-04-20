@@ -127,9 +127,13 @@ Application-level handlers are registered for `404`, `405`, `413`, and `500`.
     `visibility` (optional: `shared` or `private`, default `shared`)
 - `POST /memory/<id>/promote?agent_id=<id>`
   - Owner-only promote of private memory to shared
-- `GET /memory/list?limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>`
-- `GET /memory/recall?topic=<topic>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>`
-- `GET /memory/search?q=<query>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>`
+- `POST /memory/archive`
+  - Body: `memory_id` (required int), `agent_id` (required)
+- `POST /memory/invalidate`
+  - Body: `memory_id` (required int), `agent_id` (required)
+- `GET /memory/list?limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
+- `GET /memory/recall?topic=<topic>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
+- `GET /memory/search?q=<query>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
 - `DELETE /memory/<id>`
 
 Read-scope behavior when `agent_id` is provided:
@@ -138,6 +142,11 @@ Read-scope behavior when `agent_id` is provided:
 - `shared_only=true`: shared only
 - `private_only=true`: own private only
 - `shared_only=true` + `private_only=true`: rejected with `400`
+
+Status behavior:
+
+- default read filter is `status=active`
+- use `status=archived` or `status=invalidated` to inspect lifecycle states
 
 ### Entities
 
@@ -200,9 +209,9 @@ Phase 3 starts with multi-agent memory usability for local trusted agents
   - Read semantics: default to `shared + own-private`
   - Promote flow: private memory can be promoted to shared
   - API and schema additions for visibility filtering now active
-- **3B Retrieval Quality + Lifecycle (planned, partially required)**
-  - Ranking with confidence/recency/visibility weighting
-  - Merge/supersede/archive/invalidate operations
+- **3B Retrieval Quality + Lifecycle (partially implemented, partially required)**
+  - Implemented: visibility/owner/status filters and archive/invalidate lifecycle operations
+  - Planned: confidence/recency ranking enhancements and merge/supersede operations
 - **3C Scale + Ops (planned, mostly optional/defer for current scale)**
   - Async enrichment pipeline and queueing
   - Cursor pagination for larger recall workloads
@@ -227,7 +236,7 @@ uv run pytest -q --tb=no
 
 Current status:
 
-- `353 passed, 14 skipped`
+- `370 passed, 14 skipped`
 
 ## Project Layout
 

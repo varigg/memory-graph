@@ -603,3 +603,54 @@ class TestMemoryVisibilityScoping:
         )
         names = {r["name"] for r in results}
         assert names == {"alpha"}
+
+    def test_default_status_filter_excludes_archived(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        mem_id = ops.insert_memory(
+            db,
+            "archived-default-hidden",
+            "note",
+            "status-token",
+            "",
+            visibility="shared",
+            owner_agent_id="agent-alpha",
+        )
+        db.execute(
+            "UPDATE memories SET status = 'archived', status_updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (mem_id,),
+        )
+        db.commit()
+
+        list_results = ops.list_memories_scoped(db, "agent-alpha", limit=100)
+        list_names = {r["name"] for r in list_results}
+        assert "archived-default-hidden" not in list_names
+
+        search_results = ops.fts_search_memories_scoped(db, '"status-token"', "agent-alpha", limit=100)
+        search_names = {r["name"] for r in search_results}
+        assert "archived-default-hidden" not in search_names
+
+    def test_transition_memory_status_validates_owner_and_transitions(self, db):
+        import db_operations as ops  # noqa: PLC0415
+
+        mem_id = ops.insert_memory(
+            db,
+            "lifecycle",
+            "note",
+            "transition-token",
+            "",
+            visibility="private",
+            owner_agent_id="agent-alpha",
+        )
+
+        transitioned, err = ops.transition_memory_status(db, mem_id, "agent-beta", "archived")
+        assert transitioned is None
+        assert err == "forbidden"
+
+        transitioned, err = ops.transition_memory_status(db, mem_id, "agent-alpha", "invalidated")
+        assert err is None
+        assert transitioned["status"] == "invalidated"
+
+        transitioned, err = ops.transition_memory_status(db, mem_id, "agent-alpha", "archived")
+        assert transitioned is None
+        assert err == "invalid_transition"

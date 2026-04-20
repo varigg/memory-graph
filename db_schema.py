@@ -169,6 +169,19 @@ def _ensure_memories_scope_columns(conn: sqlite3.Connection) -> None:
             "ADD COLUMN updated_at DATETIME"
         )
 
+    if "status" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN status TEXT NOT NULL DEFAULT 'active' "
+            "CHECK (status IN ('active', 'archived', 'invalidated'))"
+        )
+
+    if "status_updated_at" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN status_updated_at DATETIME"
+        )
+
     conn.execute(
         "UPDATE memories "
         "SET owner_agent_id = COALESCE(NULLIF(TRIM(owner_agent_id), ''), 'unknown')"
@@ -180,6 +193,16 @@ def _ensure_memories_scope_columns(conn: sqlite3.Connection) -> None:
     conn.execute(
         "UPDATE memories "
         "SET updated_at = COALESCE(updated_at, timestamp, CURRENT_TIMESTAMP)"
+    )
+    conn.execute(
+        "UPDATE memories "
+        "SET status = CASE "
+        "WHEN status IN ('active', 'archived', 'invalidated') THEN status "
+        "ELSE 'active' END"
+    )
+    conn.execute(
+        "UPDATE memories "
+        "SET status_updated_at = COALESCE(status_updated_at, updated_at, timestamp, CURRENT_TIMESTAMP)"
     )
 
 
@@ -199,6 +222,14 @@ def init(db_path: str) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_memories_updated_at "
         "ON memories(updated_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memories_status "
+        "ON memories(status)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memories_status_updated_at "
+        "ON memories(status_updated_at)"
     )
     conn.executemany(
         "INSERT OR IGNORE INTO importance_keywords (keyword, score) VALUES (?, ?)",
