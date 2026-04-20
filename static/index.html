@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memory Graph</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --card-bg: #16213e;
+      --accent: #0f3460;
+      --accent2: #533483;
+      --text: #eaeaea;
+      --text-muted: #8888aa;
+      --topbar-h: 56px;
+      --border: #2a2a4a;
+      --node-conv: #4a90d9;
+      --node-mem: #50c878;
+      --node-ent: #f4a347;
+      --badge-user: #4a90d9;
+      --badge-assistant: #50c878;
+      --badge-system: #888;
+      --error: #c0392b;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Topbar ──────────────────────────────────────────────────── */
+    #topbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 16px;
+      height: var(--topbar-h);
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    #topbar .app-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      margin-right: auto;
+    }
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover { background: rgba(255,255,255,0.08); }
+    .tab-btn.active {
+      background: rgba(255,255,255,0.15);
+      border-color: rgba(255,255,255,0.35);
+    }
+    @media (max-width: 500px) {
+      .tab-btn .label { display: none; }
+      .tab-btn { padding: 6px 10px; font-size: 16px; }
+    }
+
+    /* ── Content area ────────────────────────────────────────────── */
+    #content {
+      position: fixed;
+      top: var(--topbar-h);
+      left: 0; right: 0; bottom: 0;
+      overflow: hidden;
+    }
+    .tab-pane {
+      display: none;
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      padding: 16px;
+    }
+    .tab-pane.active { display: block; }
+
+    /* ── Error banner ────────────────────────────────────────────── */
+    #error-banner {
+      position: fixed;
+      top: calc(var(--topbar-h) + 8px);
+      left: 50%; transform: translateX(-50%);
+      background: var(--error);
+      color: #fff;
+      padding: 8px 20px;
+      border-radius: 5px;
+      z-index: 200;
+      display: none;
+      max-width: 90vw;
+      text-align: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    }
+
+    /* ── Spinner ─────────────────────────────────────────────────── */
+    .spinner {
+      display: inline-block;
+      width: 28px; height: 28px;
+      border: 3px solid rgba(255,255,255,0.15);
+      border-top-color: var(--text);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 20px;
+      color: var(--text-muted);
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────────── */
+    .btn {
+      background: var(--accent);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: var(--accent2); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-sm { padding: 3px 10px; font-size: 12px; }
+
+    /* ── Graph tab ───────────────────────────────────────────────── */
+    #graph-pane {
+      display: none;
+      flex-direction: row;
+      gap: 0;
+      padding: 0;
+    }
+    #graph-pane.active { display: flex; }
+    #graph-canvas {
+      flex: 1;
+      position: relative;
+      min-width: 0;
+    }
+    #graph-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: var(--bg);
+    }
+    #graph-toolbar {
+      position: absolute;
+      top: 10px; left: 10px;
+      display: flex;
+      gap: 6px;
+      z-index: 10;
+    }
+    #graph-legend {
+      position: absolute;
+      bottom: 12px; left: 12px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    #graph-legend .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    #graph-legend .legend-item:last-child { margin-bottom: 0; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .legend-square { width: 10px; height: 10px; flex-shrink: 0; }
+    .legend-diamond { width: 10px; height: 10px; transform: rotate(45deg); flex-shrink: 0; }
+    #side-panel {
+      width: 280px;
+      min-width: 280px;
+      background: var(--card-bg);
+      border-left: 1px solid var(--border);
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #side-panel h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .detail-row { margin-bottom: 8px; }
+    .detail-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+    .detail-value { font-size: 13px; word-break: break-word; }
+    #side-panel-empty { color: var(--text-muted); font-size: 13px; }
+
+    /* ── Logs tab ────────────────────────────────────────────────── */
+    #logs-search {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 6px 12px;
+      font-size: 13px;
+      width: 280px;
+      max-width: 100%;
+    }
+    #logs-search::placeholder { color: var(--text-muted); }
+    .logs-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .date-group-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      padding: 6px 0;
+      font-weight: 600;
+      color: var(--text-muted);
+      font-size: 13px;
+      user-select: none;
+    }
+    .date-group-header .chevron { transition: transform 0.2s; }
+    .date-group-header.collapsed .chevron { transform: rotate(-90deg); }
+    .date-group-entries.collapsed { display: none; }
+    .log-entry {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 10px 14px;
+      margin-bottom: 6px;
+    }
+    .log-entry-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+    }
+    .log-ts { font-size: 11px; color: var(--text-muted); }
+    .role-badge {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+    .role-badge.user { background: var(--badge-user); color: #fff; }
+    .role-badge.assistant { background: var(--badge-assistant); color: #fff; }
+    .role-badge.system { background: var(--badge-system); color: #fff; }
+    .log-channel { font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 1px 6px; border-radius: 3px; }
+    .log-content { font-size: 13px; color: var(--text); }
+    .log-expand-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 11px; padding: 2px 0; text-decoration: underline; }
+
+    /* ── RAG tab ─────────────────────────────────────────────────── */
+    .rag-search-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+    #rag-input {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 6px 12px;
+      font-size: 13px;
+      width: 320px;
+      max-width: 100%;
+    }
+    #rag-input::placeholder { color: var(--text-muted); }
+    .mode-toggle { display: flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+    .mode-btn { background: transparent; border: none; color: var(--text-muted); padding: 6px 12px; cursor: pointer; font-size: 13px; transition: background 0.15s, color 0.15s; }
+    .mode-btn.active { background: var(--accent); color: var(--text); }
+    .result-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 5px; padding: 12px 16px; margin-bottom: 8px; }
+    .result-meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; font-size: 12px; color: var(--text-muted); }
+    .score-badge { background: var(--accent2); color: #fff; padding: 1px 7px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+    .rag-stats { background: var(--card-bg); border: 1px solid var(--border); border-radius: 5px; padding: 14px 16px; margin-top: 16px; }
+    .rag-stats h3 { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+    .stat-row:last-child { border-bottom: none; }
+
+    /* ── Crons tab ───────────────────────────────────────────────── */
+    .cron-notice { background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-bottom: 16px; color: var(--text-muted); font-style: italic; }
+    .cron-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 14px; }
+    .cron-card .cron-name { font-weight: 600; flex: 1; }
+    .cron-card .cron-desc { font-size: 12px; color: var(--text-muted); }
+    .status-badge { font-size: 11px; padding: 3px 9px; border-radius: 10px; font-weight: 600; white-space: nowrap; background: rgba(255,200,0,0.12); color: #f4c842; border: 1px solid rgba(244,200,66,0.3); }
+  </style>
+</head>
+<body>
+
+<div id="topbar">
+  <span class="app-title">Memory Graph</span>
+  <button class="tab-btn active" data-tab="graph"><span class="icon">&#x1F578;</span> <span class="label">Graph</span></button>
+  <button class="tab-btn" data-tab="logs"><span class="icon">&#x1F4CB;</span> <span class="label">Logs</span></button>
+  <button class="tab-btn" data-tab="rag"><span class="icon">&#x1F50D;</span> <span class="label">RAG</span></button>
+  <button class="tab-btn" data-tab="crons"><span class="icon">&#x23F1;</span> <span class="label">Crons</span></button>
+</div>
+
+<div id="error-banner"></div>
+
+<div id="content">
+
+  <!-- ===== GRAPH TAB ===== -->
+  <div id="graph-pane" class="tab-pane active">
+    <div id="graph-canvas">
+      <div id="graph-toolbar">
+        <button class="btn btn-sm" id="graph-refresh">Refresh</button>
+      </div>
+      <svg id="graph-svg"></svg>
+      <div id="graph-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--node-conv)"></div> Conversation</div>
+        <div class="legend-item"><div class="legend-square" style="background:var(--node-mem)"></div> Memory</div>
+        <div class="legend-item"><div class="legend-diamond" style="background:var(--node-ent)"></div> Entity</div>
+      </div>
+      <div id="graph-loading" class="loading-wrap" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:none">
+        <div class="spinner"></div><span>Loading graph&#x2026;</span>
+      </div>
+    </div>
+    <div id="side-panel">
+      <h3>Detail</h3>
+      <div id="side-panel-empty">Click a node to see details.</div>
+      <div id="side-panel-content" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- ===== LOGS TAB ===== -->
+  <div id="logs-pane" class="tab-pane">
+    <div class="logs-toolbar">
+      <input id="logs-search" type="search" placeholder="Filter entries&#x2026;">
+      <button class="btn btn-sm" id="logs-load-more">Load more</button>
+    </div>
+    <div id="logs-loading" class="loading-wrap" style="display:none">
+      <div class="spinner"></div><span>Loading logs&#x2026;</span>
+    </div>
+    <div id="logs-list"></div>
+  </div>
+
+  <!-- ===== RAG TAB ===== -->
+  <div id="rag-pane" class="tab-pane">
+    <div class="rag-search-row">
+      <input id="rag-input" type="text" placeholder="Enter search query&#x2026;">
+      <div class="mode-toggle">
+        <button class="mode-btn active" data-mode="semantic">Semantic</button>
+        <button class="mode-btn" data-mode="hybrid">Hybrid</button>
+      </div>
+      <button class="btn" id="rag-search-btn">Search</button>
+    </div>
+    <div id="rag-loading" class="loading-wrap" style="display:none">
+      <div class="spinner"></div><span>Searching&#x2026;</span>
+    </div>
+    <div id="rag-results"></div>
+    <div class="rag-stats" id="rag-stats-section">
+      <h3>Embedding Stats</h3>
+      <div id="rag-stats-loading" class="loading-wrap" style="display:none">
+        <div class="spinner"></div><span>Loading stats&#x2026;</span>
+      </div>
+      <div id="rag-stats-body"></div>
+      <div style="margin-top:10px">
+        <button class="btn btn-sm" id="rag-reindex-btn">Reindex</button>
+        <span id="rag-reindex-msg" style="margin-left:10px;font-size:12px;color:var(--text-muted)"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== CRONS TAB ===== -->
+  <div id="crons-pane" class="tab-pane">
+    <div class="cron-notice">No background crons are running in Phase 1.</div>
+    <h3 style="margin-bottom:12px;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted)">Planned Phase 2 Cron Jobs</h3>
+    <div class="cron-card">
+      <div>
+        <div class="cron-name">Conversation summarization</div>
+        <div class="cron-desc">Periodically summarizes recent conversations into compact memory entries.</div>
+      </div>
+      <span class="status-badge">Pending Phase 2</span>
+    </div>
+    <div class="cron-card">
+      <div>
+        <div class="cron-name">Importance rescoring</div>
+        <div class="cron-desc">Recalculates importance scores for all memories based on access frequency and recency.</div>
+      </div>
+      <span class="status-badge">Pending Phase 2</span>
+    </div>
+    <div class="cron-card">
+      <div>
+        <div class="cron-name">Memory deduplication</div>
+        <div class="cron-desc">Detects and merges near-duplicate memory entries using embedding similarity.</div>
+      </div>
+      <span class="status-badge">Pending Phase 2</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+// ── Topbar height CSS var ────────────────────────────────────────────────────
+const topbar = document.getElementById('topbar');
+function setTopbarHeight() {
+  document.documentElement.style.setProperty('--topbar-h', topbar.offsetHeight + 'px');
+}
+setTopbarHeight();
+window.addEventListener('resize', setTopbarHeight);
+
+// ── Error banner ─────────────────────────────────────────────────────────────
+const errorBanner = document.getElementById('error-banner');
+let errorTimer = null;
+function showError(msg) {
+  errorBanner.textContent = msg;
+  errorBanner.style.display = 'block';
+  clearTimeout(errorTimer);
+  errorTimer = setTimeout(() => { errorBanner.style.display = 'none'; }, 5000);
+}
+
+// ── Safe fetch wrapper ────────────────────────────────────────────────────────
+async function apiFetch(url, opts) {
+  try {
+    const resp = await fetch(url, opts);
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => resp.statusText);
+      throw new Error(resp.status + ' ' + resp.statusText + ': ' + text.slice(0, 120));
+    }
+    return resp.json();
+  } catch (err) {
+    showError('API error — ' + (err.message || String(err)));
+    throw err;
+  }
+}
+
+// ── Tab switching ────────────────────────────────────────────────────────────
+const tabBtns = document.querySelectorAll('.tab-btn');
+const tabPanes = document.querySelectorAll('.tab-pane');
+const tabActivatedOnce = {};
+
+function activateTab(tabId) {
+  tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+  tabPanes.forEach(p => {
+    const active = p.id === tabId + '-pane';
+    p.classList.toggle('active', active);
+  });
+  if (!tabActivatedOnce[tabId]) {
+    tabActivatedOnce[tabId] = true;
+    onTabFirstActivate(tabId);
+  }
+}
+
+tabBtns.forEach(btn => {
+  btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+});
+
+function onTabFirstActivate(tabId) {
+  if (tabId === 'graph') loadGraph();
+  if (tabId === 'logs') loadLogs();
+  if (tabId === 'rag') loadEmbeddingStats();
+}
+
+// ── Utility ──────────────────────────────────────────────────────────────────
+function trunc(s, n) {
+  if (!s) return '';
+  return s.length > n ? s.slice(0, n) + '\u2026' : s;
+}
+function fmtTs(ts) {
+  if (!ts) return '';
+  try { return new Date(ts).toLocaleString(); } catch (e) { return ts; }
+}
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GRAPH TAB
+// ══════════════════════════════════════════════════════════════════════════════
+const graphLoading = document.getElementById('graph-loading');
+const sidePanelEmpty = document.getElementById('side-panel-empty');
+const sidePanelContent = document.getElementById('side-panel-content');
+
+let simulation = null;
+
+async function loadGraph() {
+  graphLoading.style.display = 'flex';
+  const svg = document.getElementById('graph-svg');
+  svg.innerHTML = '';
+
+  try {
+    const [convResp, memResp] = await Promise.all([
+      apiFetch('/conversation/recent?limit=50'),
+      apiFetch('/memory/list'),
+    ]);
+
+    const conversations = Array.isArray(convResp) ? convResp
+      : (convResp.conversations || convResp.data || []);
+    const memories = Array.isArray(memResp) ? memResp
+      : (memResp.memories || memResp.data || []);
+
+    buildGraph(conversations, memories);
+  } catch (_) {
+    // error already shown
+  } finally {
+    graphLoading.style.display = 'none';
+  }
+}
+
+function buildGraph(conversations, memories) {
+  const svgEl = document.getElementById('graph-svg');
+  const W = svgEl.clientWidth || 800;
+  const H = svgEl.clientHeight || 600;
+
+  const nodes = [];
+  const links = [];
+  const entityMap = {};
+
+  conversations.forEach(function(c) {
+    nodes.push({
+      id: 'conv_' + c.id,
+      type: 'conversation',
+      label: trunc(c.content || c.message || '', 30),
+      data: c,
+    });
+  });
+
+  memories.forEach(function(m) {
+    nodes.push({
+      id: 'mem_' + m.id,
+      type: 'memory',
+      label: trunc(m.name || m.content || '', 30),
+      data: m,
+    });
+
+    const text = m.description || m.content || '';
+    const words = text.match(/\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\b/g) || [];
+    words.slice(0, 3).forEach(function(w) {
+      if (!entityMap[w]) {
+        entityMap[w] = { id: 'ent_' + w, type: 'entity', label: w, data: { name: w } };
+      }
+      links.push({ source: 'mem_' + m.id, target: 'ent_' + w });
+    });
+  });
+
+  Object.values(entityMap).forEach(function(e) { nodes.push(e); });
+
+  conversations.forEach(function(c) {
+    memories.forEach(function(m) {
+      if (c.channel && m.channel && c.channel === m.channel) {
+        links.push({ source: 'conv_' + c.id, target: 'mem_' + m.id });
+      }
+    });
+  });
+
+  const nodeById = {};
+  nodes.forEach(function(n) { nodeById[n.id] = n; });
+  const validLinks = links.filter(function(l) {
+    const src = typeof l.source === 'object' ? l.source.id : l.source;
+    const tgt = typeof l.target === 'object' ? l.target.id : l.target;
+    return nodeById[src] && nodeById[tgt];
+  });
+
+  const svgSel = d3.select(svgEl).attr('width', W).attr('height', H);
+  const g = svgSel.append('g');
+
+  svgSel.call(d3.zoom()
+    .scaleExtent([0.1, 8])
+    .on('zoom', function(event) { g.attr('transform', event.transform); })
+  );
+
+  const link = g.append('g')
+    .attr('stroke', 'rgba(255,255,255,0.12)')
+    .attr('stroke-width', 1)
+    .selectAll('line')
+    .data(validLinks)
+    .join('line');
+
+  const nodeGroup = g.append('g')
+    .selectAll('g')
+    .data(nodes)
+    .join('g')
+    .style('cursor', 'pointer')
+    .call(d3.drag()
+      .on('start', dragStart)
+      .on('drag', dragged)
+      .on('end', dragEnd)
+    )
+    .on('click', function(event, d) { showDetail(d); });
+
+  nodeGroup.each(function(d) {
+    const sel = d3.select(this);
+    if (d.type === 'conversation') {
+      sel.append('circle').attr('r', 8).attr('fill', 'var(--node-conv)');
+    } else if (d.type === 'memory') {
+      sel.append('rect').attr('x', -7).attr('y', -7).attr('width', 14).attr('height', 14).attr('fill', 'var(--node-mem)');
+    } else {
+      sel.append('rect').attr('x', -7).attr('y', -7).attr('width', 14).attr('height', 14)
+        .attr('fill', 'var(--node-ent)').attr('transform', 'rotate(45)');
+    }
+    sel.append('text')
+      .attr('x', 12).attr('y', 4)
+      .attr('font-size', '10px')
+      .attr('fill', 'var(--text)')
+      .attr('pointer-events', 'none')
+      .text(d.label);
+  });
+
+  if (simulation) simulation.stop();
+  simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(validLinks).id(function(d) { return d.id; }).distance(80))
+    .force('charge', d3.forceManyBody().strength(-120))
+    .force('center', d3.forceCenter(W / 2, H / 2))
+    .force('collision', d3.forceCollide(20))
+    .on('tick', function() {
+      link.attr('x1', function(d) { return d.source.x; })
+          .attr('y1', function(d) { return d.source.y; })
+          .attr('x2', function(d) { return d.target.x; })
+          .attr('y2', function(d) { return d.target.y; });
+      nodeGroup.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+    });
+
+  function dragStart(event, d) {
+    if (!event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x; d.fy = d.y;
+  }
+  function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+  function dragEnd(event, d) {
+    if (!event.active) simulation.alphaTarget(0);
+    d.fx = null; d.fy = null;
+  }
+}
+
+function showDetail(d) {
+  sidePanelEmpty.style.display = 'none';
+  sidePanelContent.style.display = 'block';
+  const dt = d.data || {};
+
+  function row(label, val) {
+    if (val == null) return '';
+    return '<div class="detail-row"><div class="detail-label">' + escHtml(label) + '</div>'
+         + '<div class="detail-value">' + escHtml(String(val)) + '</div></div>';
+  }
+
+  let html = '';
+  if (d.type === 'conversation') {
+    html += row('Type', 'Conversation');
+    html += row('Role', dt.role);
+    html += row('Channel', dt.channel);
+    html += row('Timestamp', fmtTs(dt.timestamp || dt.created_at));
+    html += row('Importance', dt.importance);
+    html += row('Content', dt.content || dt.message);
+  } else if (d.type === 'memory') {
+    html += row('Type', 'Memory');
+    html += row('Name', dt.name);
+    html += row('Memory type', dt.type || dt.memory_type);
+    html += row('Description', dt.description || dt.content);
+    html += row('Importance', dt.importance);
+    html += row('Channel', dt.channel);
+  } else {
+    html += row('Type', 'Entity');
+    html += row('Name', dt.name);
+  }
+
+  sidePanelContent.innerHTML = html;
+}
+
+document.getElementById('graph-refresh').addEventListener('click', loadGraph);
+
+// ══════════════════════════════════════════════════════════════════════════════
+// LOGS TAB
+// ══════════════════════════════════════════════════════════════════════════════
+let logsLimit = 100;
+let lastLogEntries = [];
+const logsLoading = document.getElementById('logs-loading');
+const logsList = document.getElementById('logs-list');
+const logsSearch = document.getElementById('logs-search');
+
+async function loadLogs() {
+  logsLoading.style.display = 'flex';
+  logsList.innerHTML = '';
+  try {
+    const data = await apiFetch('/conversation/recent?limit=' + logsLimit);
+    const entries = Array.isArray(data) ? data : (data.conversations || data.data || []);
+    lastLogEntries = entries;
+    renderLogs(entries);
+  } catch (_) {
+    // error shown
+  } finally {
+    logsLoading.style.display = 'none';
+  }
+}
+
+function renderLogs(entries) {
+  logsList.innerHTML = '';
+  const filter = logsSearch.value.trim().toLowerCase();
+
+  const groups = {};
+  entries.forEach(function(e) {
+    const ts = e.timestamp || e.created_at || '';
+    let dateKey = 'Unknown date';
+    try { dateKey = new Date(ts).toLocaleDateString(); } catch (_) {}
+    if (!groups[dateKey]) groups[dateKey] = [];
+    groups[dateKey].push(e);
+  });
+
+  let totalVisible = 0;
+  Object.entries(groups).forEach(function([date, items]) {
+    const filtered = filter
+      ? items.filter(function(e) {
+          return (e.content || e.message || '').toLowerCase().includes(filter)
+            || (e.role || '').toLowerCase().includes(filter)
+            || (e.channel || '').toLowerCase().includes(filter);
+        })
+      : items;
+
+    if (filtered.length === 0) return;
+    totalVisible += filtered.length;
+
+    const groupEl = document.createElement('div');
+
+    const header = document.createElement('div');
+    header.className = 'date-group-header';
+    header.innerHTML = '<span class="chevron">\u25be</span><span>' + escHtml(date) + '</span>'
+      + '<span style="color:var(--text-muted);font-weight:400;font-size:12px">(' + filtered.length + ')</span>';
+
+    const entriesEl = document.createElement('div');
+    entriesEl.className = 'date-group-entries';
+
+    header.addEventListener('click', function() {
+      header.classList.toggle('collapsed');
+      entriesEl.classList.toggle('collapsed');
+    });
+
+    filtered.forEach(function(e) {
+      const content = e.content || e.message || '';
+      const preview = content.slice(0, 120);
+      const hasMore = content.length > 120;
+      const role = (e.role || 'unknown').toLowerCase();
+      const roleClass = ['user', 'assistant', 'system'].includes(role) ? role : 'system';
+
+      const entryEl = document.createElement('div');
+      entryEl.className = 'log-entry';
+      entryEl.innerHTML =
+        '<div class="log-entry-header">'
+        + '<span class="log-ts">' + escHtml(fmtTs(e.timestamp || e.created_at)) + '</span>'
+        + '<span class="role-badge ' + roleClass + '">' + escHtml(role) + '</span>'
+        + (e.channel ? '<span class="log-channel">' + escHtml(e.channel) + '</span>' : '')
+        + '</div>'
+        + '<div class="log-content">'
+        + '<span class="log-preview">' + escHtml(preview) + (hasMore ? '\u2026' : '') + '</span>'
+        + (hasMore ? '<button class="log-expand-btn">show more</button>' : '')
+        + '</div>';
+
+      if (hasMore) {
+        const btn = entryEl.querySelector('.log-expand-btn');
+        const previewSpan = entryEl.querySelector('.log-preview');
+        btn.addEventListener('click', function() {
+          if (btn.textContent === 'show more') {
+            previewSpan.textContent = content;
+            btn.textContent = 'show less';
+          } else {
+            previewSpan.textContent = content.slice(0, 120) + '\u2026';
+            btn.textContent = 'show more';
+          }
+        });
+      }
+
+      entriesEl.appendChild(entryEl);
+    });
+
+    groupEl.appendChild(header);
+    groupEl.appendChild(entriesEl);
+    logsList.appendChild(groupEl);
+  });
+
+  if (totalVisible === 0) {
+    logsList.innerHTML = '<div style="color:var(--text-muted);padding:20px">No entries match the filter.</div>';
+  }
+}
+
+logsSearch.addEventListener('input', function() {
+  renderLogs(lastLogEntries);
+});
+
+document.getElementById('logs-load-more').addEventListener('click', function() {
+  logsLimit += 100;
+  loadLogs();
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RAG TAB
+// ══════════════════════════════════════════════════════════════════════════════
+let ragMode = 'semantic';
+const ragInput = document.getElementById('rag-input');
+const ragLoading = document.getElementById('rag-loading');
+const ragResults = document.getElementById('rag-results');
+const ragStatsBody = document.getElementById('rag-stats-body');
+const ragStatsLoading = document.getElementById('rag-stats-loading');
+const ragReindexMsg = document.getElementById('rag-reindex-msg');
+
+document.querySelectorAll('.mode-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.mode-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    ragMode = btn.dataset.mode;
+  });
+});
+
+document.getElementById('rag-search-btn').addEventListener('click', doRagSearch);
+ragInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') doRagSearch(); });
+
+async function doRagSearch() {
+  const q = ragInput.value.trim();
+  if (!q) return;
+  ragLoading.style.display = 'flex';
+  ragResults.innerHTML = '';
+  try {
+    const endpoint = ragMode === 'hybrid'
+      ? '/search/hybrid?q=' + encodeURIComponent(q)
+      : '/search/semantic?q=' + encodeURIComponent(q);
+    const data = await apiFetch(endpoint);
+    const results = Array.isArray(data) ? data : (data.results || data.data || []);
+    renderRagResults(results);
+  } catch (_) {
+  } finally {
+    ragLoading.style.display = 'none';
+  }
+}
+
+function renderRagResults(results) {
+  if (results.length === 0) {
+    ragResults.innerHTML = '<div style="color:var(--text-muted);padding:10px 0">No results.</div>';
+    return;
+  }
+  ragResults.innerHTML = results.map(function(r) {
+    const score = typeof r.score === 'number' ? r.score.toFixed(4) : (r.score || '\u2014');
+    const role = (r.role || '').toLowerCase();
+    const roleClass = ['user', 'assistant', 'system'].includes(role) ? role : 'system';
+    return '<div class="result-card">'
+      + '<div class="result-meta">'
+      + '<span class="score-badge">' + escHtml(String(score)) + '</span>'
+      + (r.role ? '<span class="role-badge ' + roleClass + '">' + escHtml(r.role) + '</span>' : '')
+      + (r.channel ? '<span class="log-channel">' + escHtml(r.channel) + '</span>' : '')
+      + (r.importance != null ? '<span>importance: ' + escHtml(String(r.importance)) + '</span>' : '')
+      + '</div>'
+      + '<div class="log-content">' + escHtml(r.content || r.message || '') + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+async function loadEmbeddingStats() {
+  ragStatsLoading.style.display = 'flex';
+  ragStatsBody.innerHTML = '';
+  try {
+    const data = await apiFetch('/embeddings/stats');
+    let html = '';
+    const total = data.total != null ? data.total : (data.count != null ? data.count : (data.total_count != null ? data.total_count : null));
+    if (total != null) {
+      html += '<div class="stat-row"><span>Total embeddings</span><span>' + escHtml(String(total)) + '</span></div>';
+    }
+    Object.entries(data).forEach(function([k, v]) {
+      if (k === 'total' || k === 'count' || k === 'total_count') return;
+      html += '<div class="stat-row"><span>' + escHtml(k) + '</span><span>' + escHtml(String(v)) + '</span></div>';
+    });
+    ragStatsBody.innerHTML = html || '<div style="color:var(--text-muted)">No stats available.</div>';
+  } catch (_) {
+    ragStatsBody.innerHTML = '<div style="color:var(--text-muted)">Stats unavailable.</div>';
+  } finally {
+    ragStatsLoading.style.display = 'none';
+  }
+}
+
+document.getElementById('rag-reindex-btn').addEventListener('click', async function() {
+  const btn = document.getElementById('rag-reindex-btn');
+  btn.disabled = true;
+  ragReindexMsg.textContent = 'Reindexing\u2026';
+  try {
+    const data = await apiFetch('/embeddings/reindex', { method: 'POST' });
+    const count = data.reindexed != null ? data.reindexed : (data.count != null ? data.count : '?');
+    ragReindexMsg.textContent = 'Reindexed ' + count + ' entries.';
+    loadEmbeddingStats();
+  } catch (_) {
+    ragReindexMsg.textContent = 'Reindex failed.';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ── Initial tab activation ───────────────────────────────────────────────────
+tabActivatedOnce['graph'] = true;
+loadGraph();
+</script>
+</body>
+</html>
