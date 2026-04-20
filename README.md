@@ -123,10 +123,21 @@ Application-level handlers are registered for `404`, `405`, `413`, and `500`.
 ### Memory
 
 - `POST /memory`
-- `GET /memory/list?limit=<int>&offset=<int>`
-- `GET /memory/recall?topic=<topic>&limit=<int>&offset=<int>`
-- `GET /memory/search?q=<query>&limit=<int>&offset=<int>`
+  - Body: `name` (required), `content` (required), `owner_agent_id` (required),
+    `visibility` (optional: `shared` or `private`, default `shared`)
+- `POST /memory/<id>/promote?agent_id=<id>`
+  - Owner-only promote of private memory to shared
+- `GET /memory/list?limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>`
+- `GET /memory/recall?topic=<topic>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>`
+- `GET /memory/search?q=<query>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>`
 - `DELETE /memory/<id>`
+
+Read-scope behavior when `agent_id` is provided:
+
+- default: `shared + own private`
+- `shared_only=true`: shared only
+- `private_only=true`: own private only
+- `shared_only=true` + `private_only=true`: rejected with `400`
 
 ### Entities
 
@@ -178,17 +189,17 @@ See:
 - `docs/phase2c.md`
 - `docs/phase2d.md`
 
-## Phase 3 Plan
+## Phase 3 Status
 
 Phase 3 starts with multi-agent memory usability for local trusted agents
 (no authentication), while preserving shared memory where useful.
 
-- **3A Agent Memory Scopes (planned, required for this deployment)**
+- **3A Agent Memory Scopes (implemented, required for this deployment)**
   - Two-scope memory model: `shared` and `private`
   - Required writer identity: `owner_agent_id`
   - Read semantics: default to `shared + own-private`
   - Promote flow: private memory can be promoted to shared
-  - API and schema additions for visibility filtering and lifecycle controls
+  - API and schema additions for visibility filtering now active
 - **3B Retrieval Quality + Lifecycle (planned, partially required)**
   - Ranking with confidence/recency/visibility weighting
   - Merge/supersede/archive/invalidate operations
@@ -211,12 +222,12 @@ See:
 Run all tests:
 
 ```bash
-venv/bin/python -m pytest -q --tb=no
+uv run pytest -q --tb=no
 ```
 
 Current status:
 
-- `329 passed, 4 skipped`
+- `353 passed, 14 skipped`
 
 ## Project Layout
 

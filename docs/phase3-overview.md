@@ -11,7 +11,7 @@ This file maps Phase 3 work to the intended deployment profile:
 
 ### Phase 3A — Agent Memory Scopes
 
-- **Status**: Planned
+- **Status**: Implemented
 - **Fit**: **Required**
 - **Why**: Needed to safely combine shared and private agent memory without
   project-level partitioning.
@@ -50,10 +50,9 @@ This file maps Phase 3 work to the intended deployment profile:
 
 ## Recommended Execution Order
 
-1. 3A full minimum deliverable (required)
-2. 3B minimum deliverable (high utility)
-3. 3C minimum deliverable (ops visibility)
-4. remaining 3B/3C optional items on demand
+1. 3B minimum deliverable (high utility)
+2. 3C minimum deliverable (ops visibility)
+3. remaining 3B/3C optional items on demand
 
 ## Implementation Packaging
 
