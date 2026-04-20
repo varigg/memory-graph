@@ -24,7 +24,7 @@ def graph():
     )
     index_path = os.path.join(static_folder, "index.html")
     if os.path.isfile(index_path):
-        with open(index_path, "r", encoding="utf-8") as f:
+        with open(index_path, encoding="utf-8") as f:
             content = f.read()
         return content, 200, {"Content-Type": "text/html; charset=utf-8"}
     stub = "<!DOCTYPE html><html><head><title>Memory Graph</title></head><body><p>Memory Graph</p></body></html>"

@@ -273,7 +273,7 @@ class TestE2EMemoryScoping:
             params={"q": "ultra-unique-private-search-marker"},
         )
         assert search_r.status_code == 200
-        results = search_r.json()
+        search_r.json()
         # Depending on Phase 3A PR-3 implementation, private records should not leak
         # This test documents the expected behavior
 
@@ -297,7 +297,7 @@ class TestE2EMemoryScoping:
             params={"topic": "recall-unique-token-marker"},
         )
         assert recall_r.status_code == 200
-        results = recall_r.json()
+        recall_r.json()
         # Test documents expected behavior when read scoping is implemented
 
     def test_hybrid_search_returns_ranked_results(self, e2e_base):

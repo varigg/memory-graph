@@ -226,7 +226,7 @@ def test_hybrid_search_performs_bounded_queries_no_n_plus_one(client):
     # Insert 50 conversations (simulating realistic scale)
     for i in range(50):
         _log_conversation(client, f"hybrid-scale-test-{i}")
-    
+
     # Execute hybrid search and measure query efficiency
     # With batching fix, should be ~3-5 queries (FTS + semantic + batch fetch)
     # Without fix, would be ~50-100 queries (one per conversation)
@@ -244,7 +244,7 @@ def test_semantic_search_avoids_full_table_scan_with_large_dataset(client):
     # Create large dataset
     for i in range(200):
         _log_conversation(client, f"large-semantic-test-{i}")
-    
+
     # Search should still complete in bounded time/memory
     results = client.get("/search/semantic?q=large&limit=5").get_json()
     assert len(results) <= 5
@@ -259,7 +259,7 @@ def test_reindex_avoids_duplicating_embeddings_via_batch_insert(client):
     """
     for i in range(30):
         _log_conversation(client, f"batch-test-{i}")
-    
+
     # Reindex should complete quickly (batch) vs slowly (one-by-one)
     resp = client.post("/embeddings/reindex")
     data = resp.get_json()
@@ -275,7 +275,7 @@ def test_hybrid_search_batches_conversation_importance_lookups(client):
     """
     for i in range(25):
         _log_conversation(client, f"batch-lookup-{i}")
-    
+
     # With batching: 2-3 queries total
     # Without batching: 25-50 queries total
     results = client.get("/search/hybrid?q=batch-lookup&limit=10").get_json()

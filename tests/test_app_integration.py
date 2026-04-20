@@ -398,7 +398,6 @@ class TestDbIsolationPerRequest:
         control over the teardown cycle, independent of pytest-flask's
         long-lived request context fixture.
         """
-        import sqlite3
 
         from db_utils import get_db
 

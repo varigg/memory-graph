@@ -1,9 +1,7 @@
 """Tests for config.py — infrastructure layer."""
-import importlib
 import os
 import sys
 
-import pytest
 
 
 def _reload_config():
@@ -38,13 +36,13 @@ class TestDbPath:
         custom = str(tmp_path / "custom.db")
         monkeypatch.setenv("MEMORY_DB_PATH", custom)
         cfg = _reload_config()
-        assert cfg.Config.DB_PATH == custom
+        assert custom == cfg.Config.DB_PATH
 
     def test_db_path_env_var_takes_precedence_over_default(self, monkeypatch, tmp_path):
         custom = str(tmp_path / "override.db")
         monkeypatch.setenv("MEMORY_DB_PATH", custom)
         cfg = _reload_config()
-        assert cfg.Config.DB_PATH != os.path.expanduser("~/.claude/memory.db")
+        assert os.path.expanduser("~/.claude/memory.db") != cfg.Config.DB_PATH
 
 
 # ---------------------------------------------------------------------------

@@ -269,13 +269,13 @@ def semantic_search(db: sqlite3.Connection, query_vector: list, top_k: int = 10)
     """
     # Use a min-heap to efficiently maintain top-k results without loading all
     import heapq
-    
+
     if top_k <= 0:
         return []
-    
+
     rows = db.execute("SELECT id, text, vector FROM embeddings")
     top_results = []  # min-heap of (similarity, id, text)
-    
+
     for row in rows:
         try:
             stored_vector = json.loads(row[2])
@@ -284,13 +284,13 @@ def semantic_search(db: sqlite3.Connection, query_vector: list, top_k: int = 10)
         if not isinstance(stored_vector, list):
             continue
         sim = cosine_similarity(query_vector, stored_vector)
-        
+
         # Keep only top-k by using negative similarity in min-heap
         if len(top_results) < top_k:
             heapq.heappush(top_results, (sim, row[0], row[1]))
         elif sim > top_results[0][0]:  # Better than worst in top-k
             heapq.heapreplace(top_results, (sim, row[0], row[1]))
-    
+
     # Extract and sort results by similarity descending
     scored = [
         {"id": item[1], "text": item[2], "similarity": item[0]}

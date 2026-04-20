@@ -179,13 +179,13 @@ def embeddings_reindex():
 
     db = get_db()
     rows = db.execute("SELECT id, content FROM conversations").fetchall()
-    
+
     # Batch the operations: collect all inserts and execute in bulk
     inserts_by_text = {}
     updates = []
     existing_by_text = {}
     count = 0
-    
+
     for row in rows:
         conv_id = row[0]
         content = row[1]
@@ -203,11 +203,11 @@ def embeddings_reindex():
         vector = embeddings.embed(content)
         if vector is None:
             continue
-        
+
         existing = db.execute(
             "SELECT id FROM embeddings WHERE text = ?", (content,)
         ).fetchone()
-        
+
         if existing is None:
             inserts_by_text[content] = {
                 "vector_json": json.dumps(vector),
@@ -220,7 +220,7 @@ def embeddings_reindex():
             existing_by_text[content] = emb_id
             updates.append((emb_id, conv_id))
         count += 1
-    
+
     try:
         # Execute all inserts in batch (still individual statements)
         for content, payload in inserts_by_text.items():

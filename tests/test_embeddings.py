@@ -69,8 +69,8 @@ class TestEmbedNoProvider:
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
         emb = _reload_embeddings()
         try:
-            result = emb.embed("test")
-        except Exception as exc:  # noqa: BLE001
+            emb.embed("test")
+        except Exception as exc:
             pytest.fail(f"embed() raised unexpectedly: {exc}")
 
     def test_embed_returns_none_for_empty_string_no_provider(self, monkeypatch):
@@ -151,7 +151,7 @@ class TestEmbedOpenAI:
         with patch("requests.post", return_value=self._mock_error_response()):
             try:
                 emb.embed("trigger error")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 pytest.fail(f"embed() raised on HTTP error: {exc}")
 
     def test_embed_sends_authorization_header(self, monkeypatch):
@@ -235,7 +235,7 @@ class TestEmbedGemini:
         with patch("requests.post", return_value=self._mock_error_response()):
             try:
                 emb.embed("trigger error")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 pytest.fail(f"embed() raised on HTTP error: {exc}")
 
     def test_embed_sends_text_in_gemini_request(self, monkeypatch):

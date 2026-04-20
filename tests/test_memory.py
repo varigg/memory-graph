@@ -390,7 +390,7 @@ def test_memory_list_endpoint_bounded_by_default_limit(client):
             "/memory",
             json=_memory_payload(name=f"perf-mem-{i}", content=f"content {i}"),
         )
-    
+
     # Should paginate, not return all 50
     results = client.get("/memory/list").get_json()
     assert len(results) <= 20
@@ -403,13 +403,13 @@ def test_memory_list_supports_limit_and_offset(client):
             "/memory",
             json=_memory_payload(name=f"list-mem-{i}", content=f"content {i}"),
         )
-    
+
     # Should support limit and offset like other search endpoints
     resp = client.get("/memory/list?limit=5&offset=0")
     assert resp.status_code == 200
     results = resp.get_json()
     assert len(results) <= 5
-    
+
     resp2 = client.get("/memory/list?limit=5&offset=5")
     results2 = resp2.get_json()
     if results and results2:
@@ -603,5 +603,5 @@ class TestMemoryReadScoping:
         resp = client.get("/memory/list")
         assert resp.status_code == 200
         # With legacy behavior, both should be visible
-        names = {m.get("name") for m in resp.get_json()}
+        {m.get("name") for m in resp.get_json()}
         # This documents current behavior; scoping requires agent_id
