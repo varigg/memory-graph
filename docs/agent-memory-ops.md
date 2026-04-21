@@ -2,6 +2,13 @@
 
 This document describes how autonomous agents should use the memory-graph API in long-running sessions, and how to recover quickly after server/session restarts.
 
+The current operating model is:
+
+- keep detailed working context in `/memories/session/` during the task
+- proactively write durable checkpoints, findings, and decisions at task end
+- prefer the wrapper in `agent_memory_client.py` for substantial write and restart flows
+- treat session scratch notes as ephemeral; recover from `run_id`-scoped API reads
+
 ## Goals
 
 - Keep memory retrieval high-signal over long sessions.
@@ -36,7 +43,20 @@ uv run python -c "import sys; print(sys.executable)"
 
 ## Recommended Write Pattern
 
-### 1) Write decision records with idempotency
+For substantial tasks, prefer the wrapper in `agent_memory_client.py` over raw curl.
+Use direct curl for manual checks, debugging, and endpoint validation.
+
+### 1) Proactively capture durable task outcomes
+
+At task completion, review the session journal and persist only high-signal outcomes:
+
+- validated findings backed by test runs, code inspection, or implementation work
+- durable decisions that should be discoverable later
+- important checkpoints needed for run-scoped recovery
+
+Do not store chat transcripts or speculative notes.
+
+### 2) Write decision records with idempotency
 
 Use `idempotency_key` so retries do not create duplicates.
 
@@ -59,7 +79,7 @@ curl -s -X POST http://localhost:7777/memory \
 - First request returns `201` and new `id`.
 - Replay with same idempotency key returns `200` and existing `id`.
 
-### 2) Batch writes for task checkpoints
+### 3) Batch writes for task-end checkpoints and findings
 
 ```bash
 curl -s -X POST http://localhost:7777/memory/batch \
@@ -67,28 +87,31 @@ curl -s -X POST http://localhost:7777/memory/batch \
   -d '{
     "memories": [
       {
-        "name": "trace/checkpoint-1",
-        "type": "trace",
-        "content": "Collected API constraints",
+        "name": "finding/api-constraints",
+        "type": "finding",
+        "content": "Collected API constraints and confirmed parameter validation rules",
         "owner_agent_id": "copilot",
-        "visibility": "private",
-        "tags": "trace,analysis",
+        "visibility": "shared",
+        "tags": "finding,analysis",
         "run_id": "run-2026-04-20-deploy",
-        "idempotency_key": "copilot:run-2026-04-20-deploy:cp-1"
+        "idempotency_key": "copilot:run-2026-04-20-deploy:finding-1"
       },
       {
-        "name": "trace/checkpoint-2",
-        "type": "trace",
-        "content": "Implemented schema migration",
+        "name": "decision/deploy-strategy",
+        "type": "decision",
+        "content": "Use blue-green deploy for service X",
         "owner_agent_id": "copilot",
-        "visibility": "private",
-        "tags": "trace,implementation",
+        "visibility": "shared",
+        "tags": "decision,deploy,needs-review",
         "run_id": "run-2026-04-20-deploy",
-        "idempotency_key": "copilot:run-2026-04-20-deploy:cp-2"
+        "idempotency_key": "copilot:run-2026-04-20-deploy:decision-1"
       }
     ]
   }'
 ```
+
+Batch writes default memories to `unverified`. For findings already confirmed during the
+task, immediately follow with `POST /memory/verify`.
 
 ## Recommended Read Pattern
 
@@ -131,17 +154,20 @@ Allowed status values:
 - `verified`
 - `disputed`
 
+In the current workflow, verification is a second pass after `POST /memory/batch`.
+Do not assume batch writes apply `verification_status` directly.
+
 ## Signal Best Practices
 
 Use a consistent pattern so `/metrics/memory-usefulness` reflects real workflow quality.
 
-### Pattern A: Session checkpoint batches
+### Pattern A: Task-end checkpoint batches
 
-Use this for multi-step autonomous runs where restart recovery matters.
+Use this for substantial runs where restart recovery matters.
 
 - include `run_id` on each checkpoint memory
 - include deterministic `idempotency_key` per stable checkpoint step
-- include checkpoint-oriented tags (for example `checkpoint,trace`)
+- include checkpoint-oriented tags (for example `checkpoint,finding`)
 
 ```bash
 curl -s -X POST http://localhost:7777/memory/batch \
@@ -150,21 +176,21 @@ curl -s -X POST http://localhost:7777/memory/batch \
     "memories": [
       {
         "name": "checkpoint/plan-accepted",
-        "type": "trace",
+        "type": "finding",
         "content": "Approved implementation plan for sprint-a",
         "owner_agent_id": "copilot",
-        "visibility": "private",
-        "tags": "checkpoint,trace",
+        "visibility": "shared",
+        "tags": "checkpoint,finding",
         "run_id": "run-sprint-a-001",
         "idempotency_key": "copilot:run-sprint-a-001:checkpoint-plan-accepted"
       },
       {
         "name": "checkpoint/tests-green",
-        "type": "trace",
+        "type": "finding",
         "content": "Targeted metrics tests are green",
         "owner_agent_id": "copilot",
-        "visibility": "private",
-        "tags": "checkpoint,test",
+        "visibility": "shared",
+        "tags": "checkpoint,test,verified",
         "run_id": "run-sprint-a-001",
         "idempotency_key": "copilot:run-sprint-a-001:checkpoint-tests-green"
       }
@@ -178,7 +204,7 @@ Use this for durable, shareable outputs that should be discoverable later.
 
 - include `run_id` to correlate with the originating task
 - include domain tags such as `fact`, `decision`, and area labels
-- include `idempotency_key` only when retries are likely or duplicates are costly
+- include deterministic `idempotency_key` by default so task-end writes are replay-safe
 
 ```bash
 curl -s -X POST http://localhost:7777/memory \
@@ -197,7 +223,7 @@ curl -s -X POST http://localhost:7777/memory \
 
 ### Pattern C: Verification and lifecycle updates
 
-Use this when evidence is gathered and trust state should be updated.
+Use this immediately after batch writes when evidence is already gathered and trust state should be updated.
 
 - call `/memory/verify` with explicit `verification_status`
 - set `verification_source` to a concrete provenance string
@@ -219,6 +245,7 @@ Trade-offs:
 - `run_id` groups related writes for reconstruction and analysis.
 - `tags` improve retrieval facets and human interpretability.
 - `idempotency_key` avoids duplicates on retries but requires stable key design.
+- `verification_status` should reflect observed evidence, not aspiration.
 
 ## Scorecard Interpretation
 

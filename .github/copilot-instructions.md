@@ -6,7 +6,7 @@ The memory-graph REST API runs locally on **http://localhost:7777**.
 DB: `~/.claude/memory.db`.
 Start command: `MEMORY_DB_PATH=~/.claude/memory.db /home/varigg/code/memory-graph/.venv/bin/python /home/varigg/code/memory-graph/api_server.py`
 
-When asked to store, retrieve, archive, or search memories in the shared store, prefer the wrapper (`agent_memory_client.py`) for substantial tasks and use direct curl for quick/manual checks. Always check `/health` first; if the service is down, inform the user rather than silently failing.
+For substantial tasks, proactively store durable checkpoints and important findings in the shared store at task end using the wrapper (`agent_memory_client.py`). Use direct curl for quick/manual checks and one-off debugging. Always check `/health` first; if the service is down, inform the user rather than silently failing.
 
 ## Agent identity
 
@@ -82,6 +82,8 @@ Wrapper for API operations:
 ### Required execution behavior
 
 - For substantial tasks, use the wrapper for writes and restart queries.
+- Proactively capture important checkpoints, validated findings, and durable decisions at task end even when the user did not explicitly ask for a memory write.
+- Do not store chat transcripts or speculative notes; promote only durable, high-signal task outcomes.
 - Always health-check before writes (`GET /health`), and report outage instead of silently failing.
 - Write durable memories at task end (not every turn), with `run_id`, `tags`, and deterministic `idempotency_key`.
 - Verification is two-pass: batch-write first, then verify confirmed findings with `POST /memory/verify`.
