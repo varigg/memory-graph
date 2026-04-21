@@ -106,6 +106,7 @@ def test_create_memory_accepts_metadata_object(client):
     items = client.get("/memory/list").get_json()
     created = next(i for i in items if i["id"] == resp.get_json()["id"])
     assert "metadata_json" in created
+    assert created["metadata"] == {"priority": "high", "attempt": 2, "urgent": True}
 
 
 def test_create_memory_rejects_non_object_metadata(client):
@@ -321,6 +322,18 @@ def test_recall_filters_by_tag(client):
     assert results[0]["name"] == "ops-1"
 
 
+def test_recall_includes_parsed_metadata(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="recall-meta", content="deploy metadata", metadata={"priority": "high"}),
+    )
+
+    results = client.get("/memory/recall?topic=deploy").get_json()
+    item = next(r for r in results if r["name"] == "recall-meta")
+    assert item["metadata"] == {"priority": "high"}
+    assert "metadata_json" in item
+
+
 # ---------------------------------------------------------------------------
 # GET /memory/search
 # ---------------------------------------------------------------------------
@@ -374,6 +387,18 @@ def test_memory_search_rejects_invalid_min_confidence(client):
 def test_memory_search_rejects_invalid_recency_half_life(client):
     resp = client.get("/memory/search?q=search&recency_half_life_hours=0")
     assert resp.status_code == 400
+
+
+def test_memory_search_includes_parsed_metadata(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="search-meta", content="search metadata token", metadata={"attempt": 2}),
+    )
+
+    results = client.get("/memory/search?q=metadata").get_json()
+    item = next(r for r in results if r["name"] == "search-meta")
+    assert item["metadata"] == {"attempt": 2}
+    assert "metadata_json" in item
 
 
 # ---------------------------------------------------------------------------

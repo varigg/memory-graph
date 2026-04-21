@@ -207,6 +207,11 @@ Idempotency behavior for memory writes:
 - when `idempotency_key` is provided, duplicate writes by the same
   `owner_agent_id` return the existing memory id instead of creating a new row
 
+Memory response metadata behavior:
+
+- list/search/recall responses include both `metadata_json` (raw stored JSON)
+  and `metadata` (parsed object) fields
+
 ### Entities
 
 - `POST /entity`

@@ -2,6 +2,16 @@ import json
 import math
 import sqlite3
 
+
+def _deserialize_metadata(metadata_json: str):
+    if not metadata_json:
+        return {}
+    try:
+        parsed = json.loads(metadata_json)
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
 # ---------------------------------------------------------------------------
 # kv_store helpers
 # ---------------------------------------------------------------------------
@@ -143,7 +153,7 @@ def fts_search_memories(
     query_params.extend(order_params)
     query_params.extend([limit, offset])
     rows = db.execute(
-        f"SELECT m.name, m.content, m.description, m.id "
+        f"SELECT m.name, m.content, m.description, m.id, m.metadata_json "
         f"FROM memories m "
         f"INNER JOIN fts_memories f ON f.memory_id = m.id "
         f"WHERE {where_clause} "
@@ -151,7 +161,17 @@ def fts_search_memories(
         f"LIMIT ? OFFSET ?",
         query_params,
     ).fetchall()
-    return [{"name": r[0], "content": r[1], "description": r[2], "memory_id": r[3]} for r in rows]
+    return [
+        {
+            "name": r[0],
+            "content": r[1],
+            "description": r[2],
+            "memory_id": r[3],
+            "metadata_json": r[4],
+            "metadata": _deserialize_metadata(r[4]),
+        }
+        for r in rows
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +330,12 @@ def list_memories(
         f"LIMIT ? OFFSET ?",
         query_params,
     ).fetchall()
-    return [dict(r) for r in rows]
+    result = []
+    for row in rows:
+        item = dict(row)
+        item["metadata"] = _deserialize_metadata(item.get("metadata_json"))
+        result.append(item)
+    return result
 
 
 def list_memories_scoped(
@@ -376,6 +401,7 @@ def list_memories_scoped(
             "run_id": r[11],
             "idempotency_key": r[12],
             "metadata_json": r[13],
+            "metadata": _deserialize_metadata(r[13]),
             "verification_status": r[14],
             "verification_source": r[15],
             "verified_at": r[16],
@@ -426,7 +452,7 @@ def fts_search_memories_scoped(
     order_clause, order_params = _memory_order_by_clause(recency_half_life_hours)
     full_query_params = bind_params + [query] + order_params + [limit, offset]
     rows = db.execute(
-        f"SELECT m.name, m.content, m.description, m.id "
+        f"SELECT m.name, m.content, m.description, m.id, m.metadata_json "
         f"FROM memories m "
         f"INNER JOIN fts_memories f ON f.memory_id = m.id "
         f"WHERE {predicate} "
@@ -435,7 +461,17 @@ def fts_search_memories_scoped(
         f"LIMIT ? OFFSET ?",
         full_query_params,
     ).fetchall()
-    return [{"name": r[0], "content": r[1], "description": r[2], "memory_id": r[3]} for r in rows]
+    return [
+        {
+            "name": r[0],
+            "content": r[1],
+            "description": r[2],
+            "memory_id": r[3],
+            "metadata_json": r[4],
+            "metadata": _deserialize_metadata(r[4]),
+        }
+        for r in rows
+    ]
 
 
 # ---------------------------------------------------------------------------
