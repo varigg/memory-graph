@@ -1,16 +1,19 @@
-# Phase 3 Backlog — Ticket-Ready Plan
+# Phase 3 Backlog — Active Ticket-Ready Plan
 
-This backlog converts the Phase 3 minimum deliverables into implementable work
-items for the target deployment profile:
+This is the active detailed backlog for remaining Phase 3-style work.
+
+Use this file when work is too detailed for `docs/roadmap.md` but should still
+be part of the current planning surface.
+
+Deployment assumptions retained from the original Phase 3 framing:
 
 - local-only
 - <= 12 agents
 - low concurrency
 - no authentication
 
-Related implementation breakdown:
-
-- `docs/phase3a-pr-chunks.md`
+Historical implementation breakdowns such as `docs/phase3a-pr-chunks.md` are
+retained for reference only and are not active planning documents.
 
 ## Milestone M1 — Phase 3A Core (Required)
 
@@ -165,6 +168,8 @@ Current status note:
 
 ### P3C-3 Stale private memory cleanup job
 
+- **Status**: Implemented (Sprint B complete; 2026-04-21)
+
 - **Priority**: P2
 - **Depends on**: M1
 - **Scope**:
@@ -173,6 +178,19 @@ Current status note:
 - **Acceptance criteria**:
   - cleanup respects visibility and retention config
   - integration test verifies expected removals
+
+### P3C-4 Additional operational maintenance follow-ons
+
+- **Priority**: P3
+- **Depends on**: P3C-2
+- **Scope**:
+  - optional integrity checks for orphan references and duplicate candidates
+  - optional SQLite maintenance helpers where they solve a concrete local issue
+  - deeper metrics for lock retries, retrieval result counts, and dedupe behavior if current visibility proves insufficient
+- **Acceptance criteria**:
+  - each addition has a concrete operational use case rather than being added speculatively
+  - docs identify which checks are advisory versus destructive
+  - tests cover any maintenance action that mutates state
 
 ## Deferred Items (Not Needed Now)
 
@@ -197,13 +215,17 @@ but are now present in the codebase:
   memory list/search/recall results
 - verification state updates via `POST /memory/verify`
 - merge/supersede lifecycle operations
+- stale private cleanup via `POST /memory/cleanup-private` with retention-driven
+  targeting, dry-run support, owner/status filtering, and deletion summaries
 - restart-safe autonomous-agent operating guidance in `docs/agent-memory-ops.md`
 
 ## Suggested Sprint Order
 
-1. Sprint A: P3C-1 request correlation id support
-2. Sprint B: deepen P3C-2 metrics beyond initial usefulness slice
-3. Sprint C: P3C-3 stale private memory cleanup
+1. Sprint A: operational adoption of memory signals so the usefulness scorecard becomes meaningful in real workflows (complete; 2026-04-21)
+   - See `docs/plans/sprint-a-memory-signal-adoption.md` for implementation plan
+2. Sprint B: P3C-3 stale private memory cleanup (complete; 2026-04-21)
+  - See `docs/plans/sprint-b-stale-private-memory-cleanup.md` for implementation details and validation
+3. Sprint C: P3C-4 additional operational maintenance follow-ons only if real local ops gaps remain
 4. Sprint D: harness-bridge primitives if/when goal/autonomy work begins
 
 ## Definition of Done (Phase 3 minimum)
@@ -218,5 +240,5 @@ Current interpretation:
 - M1 is complete.
 - M2 is complete and exceeded.
 - M3 is complete: request correlation (P3C-1) and route-level latency/error
-  counters (P3C-2) are both implemented. P3C-3 stale private cleanup remains
-  the next open item.
+  counters (P3C-2) are both implemented. P3C-3 stale private cleanup is now
+  implemented.

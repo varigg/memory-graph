@@ -2,8 +2,8 @@ import os
 
 from flask import Blueprint, current_app, jsonify
 
-from db_operations import get_memory_usefulness_metrics
 from db_utils import get_db
+from storage.metrics_repository import get_memory_usefulness_metrics
 
 bp = Blueprint("utility", __name__)
 

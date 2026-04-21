@@ -164,6 +164,72 @@ def test_memory_usefulness_metrics_reflects_memory_state(client):
     assert data["coverage_pct"]["verified"] == 50.0
 
 
+def test_memory_usefulness_metrics_adoption_pattern_batch_replay_and_verify(client):
+    batch_payload = {
+        "memories": [
+            {
+                "name": "checkpoint/scope",
+                "type": "trace",
+                "content": "Sprint A scope checkpoint",
+                "owner_agent_id": "agent-alpha",
+                "visibility": "private",
+                "tags": "checkpoint,trace",
+                "run_id": "run-sprint-a-1",
+                "idempotency_key": "agent-alpha:run-sprint-a-1:checkpoint-scope",
+            },
+            {
+                "name": "decision/kickoff",
+                "type": "decision",
+                "content": "Kickoff Sprint A with scorecard adoption",
+                "owner_agent_id": "agent-alpha",
+                "visibility": "shared",
+                "tags": "decision,phase3,sprint-a",
+                "run_id": "run-sprint-a-1",
+                "idempotency_key": "agent-alpha:run-sprint-a-1:decision-kickoff",
+            },
+        ]
+    }
+
+    first = client.post("/memory/batch", json=batch_payload)
+    assert first.status_code == 201
+    first_results = first.get_json()["results"]
+    assert len(first_results) == 2
+    assert first_results[0]["created"] is True
+    assert first_results[1]["created"] is True
+
+    replay = client.post("/memory/batch", json=batch_payload)
+    assert replay.status_code == 201
+    replay_results = replay.get_json()["results"]
+    assert len(replay_results) == 2
+    assert replay_results[0]["created"] is False
+    assert replay_results[1]["created"] is False
+    assert replay_results[0]["id"] == first_results[0]["id"]
+    assert replay_results[1]["id"] == first_results[1]["id"]
+
+    verify = client.post(
+        "/memory/verify",
+        json={
+            "memory_id": first_results[1]["id"],
+            "agent_id": "agent-alpha",
+            "verification_status": "verified",
+            "verification_source": "test_memory_usefulness_metrics_adoption_pattern_batch_replay_and_verify",
+        },
+    )
+    assert verify.status_code == 200
+
+    data = client.get("/metrics/memory-usefulness").get_json()
+    assert data["memory_counts"]["total"] == 2
+    assert data["adoption_signals"]["run_tracked"] == 2
+    assert data["adoption_signals"]["idempotent"] == 2
+    assert data["adoption_signals"]["tagged"] == 2
+    assert data["trust_signals"]["verified"] == 1
+    assert data["run_signals"]["distinct_runs"] == 1
+    assert data["coverage_pct"]["run_tracked"] > 0.0
+    assert data["coverage_pct"]["idempotent"] > 0.0
+    assert data["coverage_pct"]["tagged"] > 0.0
+    assert data["coverage_pct"]["verified"] > 0.0
+
+
 # ---------------------------------------------------------------------------
 # GET /metrics/ops
 # ---------------------------------------------------------------------------

@@ -9,19 +9,25 @@ SQLite, supports FTS5 and semantic retrieval, and exposes a small web UI.
 Use these documents as the canonical reading path for the project:
 
 - `README.md` — current API surface, runtime workflow, and project status
+- `docs/architecture.md` — current architectural shape, system boundaries, and why the service remains one substrate
+- `docs/adr/README.md` — architecture decision record index
 - `docs/roadmap.md` — canonical living feature tracker across implemented, planned, and deferred work
 - `docs/conversation-outcomes.md` — durable summary of design-discussion outcomes and where they landed
 - `docs/phase1-2-consolidated.md` — consolidated review and implementation summary for the original backend foundation and hardening work
-- `docs/phase3-overview.md` — Phase 3 direction and multi-agent memory evolution
-- `docs/phase3a.md` — shared/private memory scopes and read semantics
-- `docs/phase3b.md` — retrieval quality and lifecycle operations
-- `docs/phase3c.md` — planned scale and ops follow-on work
-- `docs/phase3-backlog.md` — deferred and future work inventory
+- `docs/phase3-backlog.md` — the active detailed backlog for remaining Phase 3 and follow-on operational work
 - `docs/agent-memory-ops.md` — restart-safe autonomous-agent operating conventions for this service
 - `harness.md` — target autonomous-agent harness vision that this backend is intended to support over time
 - `.github/copilot-instructions.md` — Copilot-specific session continuity and shared-memory usage hints for this repo
 
-If you want the shortest end-to-end overview, read this file first, then `docs/roadmap.md`, then `docs/conversation-outcomes.md`, then `docs/phase1-2-consolidated.md`, then `docs/phase3-overview.md`, then `docs/agent-memory-ops.md`, and finally `harness.md`.
+Historical/reference docs retained for implementation context:
+
+- `docs/phase3-overview.md` — original deployment-fit framing for Phase 3
+- `docs/phase3a.md` — implemented shared/private memory scope contract
+- `docs/phase3a-pr-chunks.md` — historical PR decomposition for the Phase 3A rollout
+- `docs/phase3b.md` — implemented retrieval quality and lifecycle scope
+- `docs/phase3c.md` — remaining Phase 3C ops themes summarized at a high level
+
+If you want the shortest end-to-end overview, read this file first, then `docs/architecture.md`, then `docs/adr/README.md`, then `docs/roadmap.md`, then `docs/conversation-outcomes.md`, then `docs/phase1-2-consolidated.md`, then `docs/phase3-backlog.md`, then `docs/agent-memory-ops.md`, and finally `harness.md`.
 
 ## Quick Start
 
@@ -166,6 +172,10 @@ Application-level handlers are registered for `404`, `405`, `413`, and `500`.
   - Body: `memory_id` (required int), `agent_id` (required),
     `verification_status` (`unverified|verified|disputed`),
     `verification_source` (optional)
+- `POST /memory/cleanup-private`
+  - Body: `retention_days` (required int > 0), `dry_run` (optional bool, default `true`),
+    `owner_agent_id` (optional string), `status` (optional: `active|archived|invalidated|all`, default `active`)
+  - Response summary: `candidate_count`, `deleted_count`, `candidate_ids`, `cutoff_timestamp`
 - `GET /memory/list?limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
 - `GET /memory/recall?topic=<topic>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
 - `GET /memory/search?q=<query>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
@@ -212,6 +222,15 @@ Memory response metadata behavior:
 - list/search/recall responses include both `metadata_json` (raw stored JSON)
   and `metadata` (parsed object) fields
 
+Stale private cleanup behavior:
+
+- cleanup only considers `visibility=private` memories that are older than the
+  computed cutoff (`now - retention_days`)
+- `dry_run=true` reports candidates without deleting anything
+- `dry_run=false` permanently deletes matching private memories and returns a
+  deterministic deletion summary
+- optional `owner_agent_id` narrows cleanup to one owner's private memories
+
 ### Entities
 
 - `POST /entity`
@@ -257,6 +276,37 @@ usage quality, including:
 - freshness signals for recent vs stale memory updates
 - coverage percentages showing how much of the memory corpus uses these
   conventions
+
+### Memory Signals and Adoption Tracking
+
+Use these write fields consistently so usefulness coverage metrics are meaningful:
+
+| Field                 | Semantic meaning                                 | Typical value pattern                             |
+| --------------------- | ------------------------------------------------ | ------------------------------------------------- |
+| `run_id`              | Correlates memories produced by one task/session | `run-<date>-<topic>`                              |
+| `idempotency_key`     | Prevents duplicate writes on retries             | `<agent>:<run_id>:<stable-step-id>`               |
+| `tags`                | Retrieval facets for topic/type filtering        | `decision,phase3,sprint-a`                        |
+| `verification_status` | Trust state after review                         | `verified`, `unverified`, `disputed`              |
+| `verification_source` | Provenance of trust update                       | `integration test`, `user review`, `policy check` |
+
+See `docs/agent-memory-ops.md` for worked write/read patterns.
+
+Example usefulness scorecard shape after signal-aware writes:
+
+```json
+{
+  "coverage_pct": {
+    "run_tracked": 66.7,
+    "idempotent": 66.7,
+    "tagged": 100.0,
+    "verified": 33.3
+  },
+  "run_signals": {
+    "distinct_runs": 1,
+    "active_run_tracked": 2
+  }
+}
+```
 
 ## Phase 2 Summary
 
@@ -330,20 +380,23 @@ Current status:
 memory-graph/
 ├── api_server.py
 ├── config.py
-├── db_operations.py
 ├── db_schema.py
 ├── db_utils.py
 ├── embeddings.py
 ├── harness.md
+├── pyproject.toml
 ├── requirements.txt
 ├── blueprints/
+│   ├── _params.py
 │   ├── conversations.py
 │   ├── kv.py
 │   ├── memory.py
 │   ├── search.py
 │   └── utility.py
 ├── docs/
+│   ├── adr/
 │   ├── agent-memory-ops.md
+│   ├── architecture.md
 │   ├── conversation-outcomes.md
 │   ├── phase1-2-consolidated.md
 │   ├── roadmap.md
@@ -351,10 +404,23 @@ memory-graph/
 │   ├── phase3a-pr-chunks.md
 │   ├── phase3b.md
 │   ├── phase3c.md
+│   ├── refactor-service-layer.md
 │   ├── phase3-overview.md
 │   └── phase3-backlog.md
+├── services/
+│   ├── hybrid_search_service.py
+│   ├── memory_lifecycle_service.py
+│   ├── memory_retrieval_service.py
+│   └── memory_write_service.py
 ├── static/
 │   └── index.html
+├── storage/
+│   ├── conversation_repository.py
+│   ├── embedding_repository.py
+│   ├── entity_repository.py
+│   ├── kv_repository.py
+│   ├── memory_repository.py
+│   └── metrics_repository.py
 └── tests/
     └── ...
 ```

@@ -131,6 +131,107 @@ Allowed status values:
 - `verified`
 - `disputed`
 
+## Signal Best Practices
+
+Use a consistent pattern so `/metrics/memory-usefulness` reflects real workflow quality.
+
+### Pattern A: Session checkpoint batches
+
+Use this for multi-step autonomous runs where restart recovery matters.
+
+- include `run_id` on each checkpoint memory
+- include deterministic `idempotency_key` per stable checkpoint step
+- include checkpoint-oriented tags (for example `checkpoint,trace`)
+
+```bash
+curl -s -X POST http://localhost:7777/memory/batch \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "memories": [
+      {
+        "name": "checkpoint/plan-accepted",
+        "type": "trace",
+        "content": "Approved implementation plan for sprint-a",
+        "owner_agent_id": "copilot",
+        "visibility": "private",
+        "tags": "checkpoint,trace",
+        "run_id": "run-sprint-a-001",
+        "idempotency_key": "copilot:run-sprint-a-001:checkpoint-plan-accepted"
+      },
+      {
+        "name": "checkpoint/tests-green",
+        "type": "trace",
+        "content": "Targeted metrics tests are green",
+        "owner_agent_id": "copilot",
+        "visibility": "private",
+        "tags": "checkpoint,test",
+        "run_id": "run-sprint-a-001",
+        "idempotency_key": "copilot:run-sprint-a-001:checkpoint-tests-green"
+      }
+    ]
+  }'
+```
+
+### Pattern B: Fact/decision writes
+
+Use this for durable, shareable outputs that should be discoverable later.
+
+- include `run_id` to correlate with the originating task
+- include domain tags such as `fact`, `decision`, and area labels
+- include `idempotency_key` only when retries are likely or duplicates are costly
+
+```bash
+curl -s -X POST http://localhost:7777/memory \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "decision/sprint-a-scope",
+    "type": "decision",
+    "content": "Sprint A starts with docs + scorecard adoption tests",
+    "owner_agent_id": "copilot",
+    "visibility": "shared",
+    "tags": "decision,phase3,sprint-a",
+    "run_id": "run-sprint-a-001",
+    "idempotency_key": "copilot:run-sprint-a-001:decision-scope"
+  }'
+```
+
+### Pattern C: Verification and lifecycle updates
+
+Use this when evidence is gathered and trust state should be updated.
+
+- call `/memory/verify` with explicit `verification_status`
+- set `verification_source` to a concrete provenance string
+- keep the same run context in nearby checkpoints for auditability
+
+```bash
+curl -s -X POST http://localhost:7777/memory/verify \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "memory_id": 123,
+    "agent_id": "copilot",
+    "verification_status": "verified",
+    "verification_source": "sprint-a integration test"
+  }'
+```
+
+Trade-offs:
+
+- `run_id` groups related writes for reconstruction and analysis.
+- `tags` improve retrieval facets and human interpretability.
+- `idempotency_key` avoids duplicates on retries but requires stable key design.
+
+## Scorecard Interpretation
+
+`GET /metrics/memory-usefulness` is a current-state scorecard, not a historical trend.
+
+- `coverage_pct.run_tracked`: percentage of all memories with `run_id`
+- `coverage_pct.idempotent`: percentage of all memories with `idempotency_key`
+- `coverage_pct.tagged`: percentage of all memories with non-empty tags
+- `coverage_pct.verified`: percentage of all memories with verification status set
+
+When Sprint A patterns are adopted correctly, these percentages should become
+non-trivial in test and operational workflows.
+
 ## Restart Checklist
 
 After a server restart:
@@ -167,6 +268,11 @@ Implemented now:
   `metadata_key`/`metadata_value`/`metadata_value_type` read filters)
 - Retrieval controls (`min_confidence`, `updated_since`, `recency_half_life_hours`)
 - Verification endpoint (`POST /memory/verify`)
+- Operational memory signal adoption patterns (Sprint A, 2026-04-21): all write
+  flows documented with `run_id`, `idempotency_key`, `tags`, and verification
+  patterns across checkpoint, fact/decision, and lifecycle update flows
+- Scorecard coverage tracking via `/metrics/memory-usefulness` `coverage_pct` fields;
+  adoption test validates non-trivial percentages under realistic signal patterns
 
 Still future work:
 

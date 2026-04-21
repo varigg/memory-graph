@@ -622,6 +622,158 @@ def test_archive_rejected_after_invalidation(client):
 
 
 # ---------------------------------------------------------------------------
+# POST /memory/cleanup-private
+# ---------------------------------------------------------------------------
+
+def test_cleanup_private_dry_run_returns_candidates_without_mutation(client):
+    private_id = client.post(
+        "/memory",
+        json=_memory_payload(name="stale-private-dry", visibility="private"),
+    ).get_json()["id"]
+
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "UPDATE memories SET updated_at = datetime('now', '-40 days') WHERE id = ?",
+            (private_id,),
+        )
+        db.commit()
+
+    cleanup = client.post(
+        "/memory/cleanup-private",
+        json={"retention_days": 30, "dry_run": True},
+    )
+    assert cleanup.status_code == 200
+    data = cleanup.get_json()
+    assert data["dry_run"] is True
+    assert data["candidate_count"] == 1
+    assert data["deleted_count"] == 0
+    assert private_id in data["candidate_ids"]
+
+    active_private = client.get(
+        "/memory/list?agent_id=agent-alpha&private_only=true&status=active"
+    ).get_json()
+    assert any(item["id"] == private_id for item in active_private)
+
+
+def test_cleanup_private_deletes_only_stale_private_memories(client):
+    stale_private_id = client.post(
+        "/memory",
+        json=_memory_payload(name="stale-private-delete", visibility="private"),
+    ).get_json()["id"]
+    stale_shared_id = client.post(
+        "/memory",
+        json=_memory_payload(name="stale-shared-keep", visibility="shared"),
+    ).get_json()["id"]
+
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "UPDATE memories SET updated_at = datetime('now', '-45 days') WHERE id IN (?, ?)",
+            (stale_private_id, stale_shared_id),
+        )
+        db.commit()
+
+    cleanup = client.post(
+        "/memory/cleanup-private",
+        json={"retention_days": 30, "dry_run": False, "status": "all"},
+    )
+    assert cleanup.status_code == 200
+    data = cleanup.get_json()
+    assert data["candidate_count"] == 1
+    assert data["deleted_count"] == 1
+    assert stale_private_id in data["candidate_ids"]
+
+    all_memories = client.get("/memory/list?status=active").get_json()
+    assert not any(item["id"] == stale_private_id for item in all_memories)
+    assert any(item["id"] == stale_shared_id for item in all_memories)
+
+
+def test_cleanup_private_respects_retention_days_boundary(client):
+    old_private_id = client.post(
+        "/memory",
+        json=_memory_payload(name="private-old", visibility="private"),
+    ).get_json()["id"]
+    fresh_private_id = client.post(
+        "/memory",
+        json=_memory_payload(name="private-fresh", visibility="private"),
+    ).get_json()["id"]
+
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "UPDATE memories SET updated_at = datetime('now', '-40 days') WHERE id = ?",
+            (old_private_id,),
+        )
+        db.execute(
+            "UPDATE memories SET updated_at = datetime('now', '-10 days') WHERE id = ?",
+            (fresh_private_id,),
+        )
+        db.commit()
+
+    cleanup = client.post(
+        "/memory/cleanup-private",
+        json={"retention_days": 30, "dry_run": False},
+    )
+    assert cleanup.status_code == 200
+    data = cleanup.get_json()
+    assert data["candidate_count"] == 1
+    assert data["deleted_count"] == 1
+    assert old_private_id in data["candidate_ids"]
+    assert fresh_private_id not in data["candidate_ids"]
+
+
+def test_cleanup_private_respects_owner_agent_filter(client):
+    alpha_private_id = client.post(
+        "/memory",
+        json=_memory_payload(name="alpha-private", visibility="private", owner_agent_id="agent-alpha"),
+    ).get_json()["id"]
+    beta_private_id = client.post(
+        "/memory",
+        json=_memory_payload(name="beta-private", visibility="private", owner_agent_id="agent-beta"),
+    ).get_json()["id"]
+
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "UPDATE memories SET updated_at = datetime('now', '-60 days') WHERE id IN (?, ?)",
+            (alpha_private_id, beta_private_id),
+        )
+        db.commit()
+
+    cleanup = client.post(
+        "/memory/cleanup-private",
+        json={"retention_days": 30, "dry_run": False, "owner_agent_id": "agent-alpha", "status": "all"},
+    )
+    assert cleanup.status_code == 200
+    data = cleanup.get_json()
+    assert data["candidate_count"] == 1
+    assert data["deleted_count"] == 1
+    assert data["candidate_ids"] == [alpha_private_id]
+
+    all_rows = client.get("/memory/list?status=active").get_json()
+    assert any(item["id"] == beta_private_id for item in all_rows)
+
+
+def test_cleanup_private_rejects_invalid_params(client):
+    bad_retention = client.post(
+        "/memory/cleanup-private",
+        json={"retention_days": 0},
+    )
+    assert bad_retention.status_code == 400
+
+    bad_status = client.post(
+        "/memory/cleanup-private",
+        json={"retention_days": 30, "status": "retired"},
+    )
+    assert bad_status.status_code == 400
+
+
+# ---------------------------------------------------------------------------
 # POST /memory/merge and /memory/supersede
 # ---------------------------------------------------------------------------
 

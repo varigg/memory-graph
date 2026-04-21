@@ -1,4 +1,7 @@
-# Phase 3A — Agent Memory Scopes (Implemented)
+# Phase 3A — Agent Memory Scopes (Historical Record)
+
+This document is kept as a record of the implemented Phase 3A contract.
+For current planning, use `docs/roadmap.md` and `docs/phase3-backlog.md`.
 
 ## Goal
 

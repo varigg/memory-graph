@@ -25,8 +25,8 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["blueprints"]
-py-modules = ["api_server", "config", "db_operations", "db_schema", "db_utils", "embeddings"]
+packages = ["blueprints", "storage", "services"]
+py-modules = ["api_server", "config", "db_schema", "db_utils", "embeddings"]
 
 
 [tool.uv]
@@ -44,7 +44,7 @@ output-format = "grouped"
 fix = true
 
 [tool.ruff.lint.isort]
-known-first-party = ["db_schema", "db_operations", "db_utils", "embeddings", "config", "api_server"]
+known-first-party = ["db_schema", "db_utils", "embeddings", "config", "api_server", "storage", "services"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

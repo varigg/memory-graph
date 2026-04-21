@@ -1,4 +1,7 @@
-# Phase 3B — Retrieval Quality and Memory Lifecycle (Implemented)
+# Phase 3B — Retrieval Quality and Memory Lifecycle (Historical Record)
+
+This document is kept as a record of the implemented Phase 3B scope.
+For current planning, use `docs/roadmap.md` and `docs/phase3-backlog.md`.
 
 ## Goal
 
