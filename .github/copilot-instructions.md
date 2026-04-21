@@ -117,3 +117,9 @@ Do not write to the service speculatively or on every turn. Write only when ther
 - Prefer `idempotency_key` and `run_id` for restart-safe writes and deterministic replays.
 - Use `visibility=private` for draft/internal checkpoints; promote to `shared` when validated.
 - Archive/invalidate/supersede outdated memories to keep recall quality high.
+
+## Required planning policy
+
+- `docs/roadmap.md` is the canonical living feature tracker.
+- Whenever development changes a feature's status, scope, or canonical source of
+  truth, update `docs/roadmap.md` in the same change set as the code/doc change.
