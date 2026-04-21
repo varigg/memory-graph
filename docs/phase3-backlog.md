@@ -174,7 +174,6 @@ Current status note:
 - cursor pagination migration
 - enterprise auth/tenant controls
 - ranking explainability fields in search results (`rank_components`, `match_reasons`)
-- typed metadata/JSON filtering beyond current `run_id`/`tag` string filters
 - formal verifier evidence model beyond the current verification status fields
 
 ## Implemented Beyond Original Backlog Text
@@ -186,6 +185,8 @@ but are now present in the codebase:
 - write idempotency via `idempotency_key`
 - retrieval filters for `run_id`, `tag`, `min_confidence`, `updated_since`, and
   `recency_half_life_hours`
+- typed metadata write support (`metadata`) and typed metadata read filters
+  (`metadata_key`, `metadata_value`, `metadata_value_type`)
 - verification state updates via `POST /memory/verify`
 - merge/supersede lifecycle operations
 - restart-safe autonomous-agent operating guidance in `docs/agent-memory-ops.md`

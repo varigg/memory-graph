@@ -152,7 +152,8 @@ Application-level handlers are registered for `404`, `405`, `413`, and `500`.
 - `POST /memory`
   - Body: `name` (required), `content` (required), `owner_agent_id` (required),
     `visibility` (optional: `shared` or `private`, default `shared`)
-  - Optional write controls: `tags`, `run_id`, `idempotency_key`
+  - Optional write controls: `tags`, `run_id`, `idempotency_key`,
+    `metadata` (JSON object)
 - `POST /memory/batch`
   - Body: `{"memories": [ ... ]}` where each item follows `POST /memory`
 - `POST /memory/<id>/promote?agent_id=<id>`
@@ -177,6 +178,9 @@ Additional memory retrieval filters (for `list`, `recall`, and `search`):
 - `min_confidence=<0..1>`
 - `updated_since=<timestamp>`
 - `recency_half_life_hours=<positive_number>`
+- `metadata_key=<key>`
+- `metadata_value=<value>`
+- `metadata_value_type=string|number|boolean|null`
 
 Read-scope behavior when `agent_id` is provided:
 

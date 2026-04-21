@@ -163,11 +163,12 @@ Implemented now:
 - Batch create (`POST /memory/batch`)
 - Idempotency keys (`POST /memory` + batch item support)
 - Metadata filters (`run_id`, `tag`)
+- Typed metadata document and JSON filtering (`metadata` write field and
+  `metadata_key`/`metadata_value`/`metadata_value_type` read filters)
 - Retrieval controls (`min_confidence`, `updated_since`, `recency_half_life_hours`)
 - Verification endpoint (`POST /memory/verify`)
 
 Still future work:
 
-- Server-side typed metadata document and JSON filtering
 - Formal verifier checks and evidence model
 - Goal/plan/autonomy world-model endpoints from harness

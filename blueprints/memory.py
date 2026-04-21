@@ -1,3 +1,5 @@
+import json
+
 from flask import Blueprint, jsonify, request
 
 from db_operations import (
@@ -65,6 +67,9 @@ def _parse_read_filters():
             None,
             None,
             None,
+            None,
+            None,
+            None,
             jsonify({"error": message}),
             400,
         )
@@ -114,6 +119,39 @@ def _parse_read_filters():
         if parsed_recency_half_life_hours <= 0:
             return _err("recency_half_life_hours must be > 0")
 
+    metadata_key = request.args.get("metadata_key")
+    normalized_metadata_key = (
+        metadata_key.strip() if metadata_key is not None and metadata_key.strip() else None
+    )
+
+    metadata_value_raw = request.args.get("metadata_value")
+    metadata_value_type = request.args.get("metadata_value_type", "string")
+    parsed_metadata_value = None
+    parsed_metadata_value_type = None
+    if normalized_metadata_key is not None:
+        allowed_types = {"string", "number", "boolean", "null"}
+        if metadata_value_type not in allowed_types:
+            return _err("metadata_value_type must be one of: string, number, boolean, null")
+        parsed_metadata_value_type = metadata_value_type
+
+        if metadata_value_raw is not None:
+            if metadata_value_type == "string":
+                parsed_metadata_value = metadata_value_raw
+            elif metadata_value_type == "number":
+                try:
+                    parsed_metadata_value = float(metadata_value_raw)
+                except ValueError:
+                    return _err("metadata_value must be numeric when metadata_value_type=number")
+            elif metadata_value_type == "boolean":
+                lowered = metadata_value_raw.lower()
+                if lowered not in {"true", "false"}:
+                    return _err("metadata_value must be true or false when metadata_value_type=boolean")
+                parsed_metadata_value = lowered == "true"
+            elif metadata_value_type == "null":
+                parsed_metadata_value = None
+        elif metadata_value_type == "null":
+            parsed_metadata_value = None
+
     return (
         visibility,
         normalized_owner,
@@ -123,6 +161,9 @@ def _parse_read_filters():
         parsed_min_confidence,
         normalized_updated_since,
         parsed_recency_half_life_hours,
+        normalized_metadata_key,
+        parsed_metadata_value,
+        parsed_metadata_value_type,
         None,
         None,
     )
@@ -163,6 +204,17 @@ def _normalize_memory_payload(data):
     ):
         return None, jsonify({"error": "idempotency_key must be a non-empty string when provided"}), 400
 
+    metadata = data.get("metadata", {})
+    if metadata is None:
+        metadata = {}
+    if not isinstance(metadata, dict):
+        return None, jsonify({"error": "metadata must be an object when provided"}), 400
+
+    try:
+        metadata_json = json.dumps(metadata)
+    except (TypeError, ValueError):
+        return None, jsonify({"error": "metadata must be JSON-serializable"}), 400
+
     return {
         "name": name,
         "content": content,
@@ -173,6 +225,7 @@ def _normalize_memory_payload(data):
         "tags": tags,
         "run_id": run_id.strip() if isinstance(run_id, str) else None,
         "idempotency_key": idempotency_key.strip() if isinstance(idempotency_key, str) else None,
+        "metadata_json": metadata_json,
     }, None, None
 
 
@@ -195,6 +248,7 @@ def _create_or_get_memory(db, payload):
         tags=payload["tags"],
         run_id=payload["run_id"],
         idempotency_key=idempotency_key,
+        metadata_json=payload["metadata_json"],
     )
     return {"id": rowid, "created": True}
 
@@ -391,6 +445,9 @@ def list_memories():
         min_confidence,
         updated_since,
         recency_half_life_hours,
+        metadata_key,
+        metadata_value,
+        metadata_value_type,
         err_resp,
         err_status,
     ) = _parse_read_filters()
@@ -403,35 +460,41 @@ def list_memories():
     if agent_id:
         rows = list_memories_scoped(
             db,
-            agent_id,
-            limit,
-            offset,
-            shared_only,
-            private_only,
-            visibility,
-            owner_agent_id,
-            status,
-            run_id,
-            tag,
-            min_confidence,
-            updated_since,
-            recency_half_life_hours,
+            agent_id=agent_id,
+            limit=limit,
+            offset=offset,
+            shared_only=shared_only,
+            private_only=private_only,
+            visibility=visibility,
+            owner_agent_id=owner_agent_id,
+            status=status,
+            run_id=run_id,
+            tag=tag,
+            min_confidence=min_confidence,
+            updated_since=updated_since,
+            metadata_key=metadata_key,
+            metadata_value=metadata_value,
+            metadata_value_type=metadata_value_type,
+            recency_half_life_hours=recency_half_life_hours,
         )
         return jsonify(rows)
 
     # Legacy behavior: no scoping if agent_id not provided
     rows = list_memories_db(
         db,
-        limit,
-        offset,
-        visibility,
-        owner_agent_id,
-        status,
-        run_id,
-        tag,
-        min_confidence,
-        updated_since,
-        recency_half_life_hours,
+        limit=limit,
+        offset=offset,
+        visibility=visibility,
+        owner_agent_id=owner_agent_id,
+        status=status,
+        run_id=run_id,
+        tag=tag,
+        min_confidence=min_confidence,
+        updated_since=updated_since,
+        metadata_key=metadata_key,
+        metadata_value=metadata_value,
+        metadata_value_type=metadata_value_type,
+        recency_half_life_hours=recency_half_life_hours,
     )
     return jsonify(rows)
 
@@ -461,6 +524,9 @@ def recall_memory():
         min_confidence,
         updated_since,
         recency_half_life_hours,
+        metadata_key,
+        metadata_value,
+        metadata_value_type,
         err_resp,
         err_status,
     ) = _parse_read_filters()
@@ -487,6 +553,9 @@ def recall_memory():
                 min_confidence=min_confidence,
                 updated_since=updated_since,
                 recency_half_life_hours=recency_half_life_hours,
+                metadata_key=metadata_key,
+                metadata_value=metadata_value,
+                metadata_value_type=metadata_value_type,
             )
         else:
             results = fts_search_memories(
@@ -502,6 +571,9 @@ def recall_memory():
                 min_confidence=min_confidence,
                 updated_since=updated_since,
                 recency_half_life_hours=recency_half_life_hours,
+                metadata_key=metadata_key,
+                metadata_value=metadata_value,
+                metadata_value_type=metadata_value_type,
             )
     except Exception:
         results = []
@@ -533,6 +605,9 @@ def search_memory():
         min_confidence,
         updated_since,
         recency_half_life_hours,
+        metadata_key,
+        metadata_value,
+        metadata_value_type,
         err_resp,
         err_status,
     ) = _parse_read_filters()
@@ -559,6 +634,9 @@ def search_memory():
                 min_confidence=min_confidence,
                 updated_since=updated_since,
                 recency_half_life_hours=recency_half_life_hours,
+                metadata_key=metadata_key,
+                metadata_value=metadata_value,
+                metadata_value_type=metadata_value_type,
             )
         else:
             results = fts_search_memories(
@@ -574,6 +652,9 @@ def search_memory():
                 min_confidence=min_confidence,
                 updated_since=updated_since,
                 recency_half_life_hours=recency_half_life_hours,
+                metadata_key=metadata_key,
+                metadata_value=metadata_value,
+                metadata_value_type=metadata_value_type,
             )
     except Exception:
         results = []

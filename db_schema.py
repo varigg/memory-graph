@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS memories (
     tags        TEXT DEFAULT '',
     run_id      TEXT,
     idempotency_key TEXT,
+    metadata_json TEXT DEFAULT '{}',
     verification_status TEXT DEFAULT 'unverified' CHECK (verification_status IN ('unverified', 'verified', 'disputed')),
     verification_source TEXT,
     verified_at DATETIME
@@ -218,6 +219,12 @@ def _ensure_memories_scope_columns(conn: sqlite3.Connection) -> None:
             "ADD COLUMN idempotency_key TEXT"
         )
 
+    if "metadata_json" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN metadata_json TEXT DEFAULT '{}'"
+        )
+
     if "verification_status" not in cols:
         conn.execute(
             "ALTER TABLE memories "
@@ -267,6 +274,13 @@ def _ensure_memories_scope_columns(conn: sqlite3.Connection) -> None:
         "SET verification_status = CASE "
         "WHEN verification_status IN ('unverified', 'verified', 'disputed') THEN verification_status "
         "ELSE 'unverified' END"
+    )
+    conn.execute(
+        "UPDATE memories "
+        "SET metadata_json = CASE "
+        "WHEN metadata_json IS NULL OR TRIM(metadata_json) = '' THEN '{}' "
+        "WHEN json_valid(metadata_json) = 1 THEN metadata_json "
+        "ELSE '{}' END"
     )
 
 

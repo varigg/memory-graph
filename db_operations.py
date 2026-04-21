@@ -115,6 +115,9 @@ def fts_search_memories(
     tag: str = None,
     min_confidence: float = None,
     updated_since: str = None,
+    metadata_key: str = None,
+    metadata_value=None,
+    metadata_value_type: str = None,
     recency_half_life_hours: float = None,
 ) -> list:
     filter_predicate, filter_params = _build_memory_filter_predicate(
@@ -125,6 +128,9 @@ def fts_search_memories(
         tag,
         min_confidence,
         updated_since,
+        metadata_key,
+        metadata_value,
+        metadata_value_type,
     )
     where_clause = "f.fts_memories MATCH ?"
     query_params = [query]
@@ -181,6 +187,9 @@ def _build_memory_filter_predicate(
     tag=None,
     min_confidence=None,
     updated_since=None,
+    metadata_key=None,
+    metadata_value=None,
+    metadata_value_type=None,
 ):
     predicates = []
     bind_params = []
@@ -213,6 +222,28 @@ def _build_memory_filter_predicate(
     if updated_since is not None:
         predicates.append("COALESCE(updated_at, timestamp) >= ?")
         bind_params.append(updated_since)
+
+    safe_metadata_expr = (
+        "CASE WHEN json_valid(COALESCE(metadata_json, '')) = 1 "
+        "THEN metadata_json ELSE '{}' END"
+    )
+
+    if metadata_key is not None:
+        if metadata_value_type == "null":
+            predicates.append(f"json_type({safe_metadata_expr}, '$.' || ?) = 'null'")
+            bind_params.append(metadata_key)
+        elif metadata_value is None:
+            predicates.append(f"json_type({safe_metadata_expr}, '$.' || ?) IS NOT NULL")
+            bind_params.append(metadata_key)
+        elif metadata_value_type == "string":
+            predicates.append(f"json_extract({safe_metadata_expr}, '$.' || ?) = ?")
+            bind_params.extend([metadata_key, str(metadata_value)])
+        elif metadata_value_type == "number":
+            predicates.append(f"json_extract({safe_metadata_expr}, '$.' || ?) = ?")
+            bind_params.extend([metadata_key, float(metadata_value)])
+        elif metadata_value_type == "boolean":
+            predicates.append(f"json_extract({safe_metadata_expr}, '$.' || ?) = ?")
+            bind_params.extend([metadata_key, 1 if metadata_value else 0])
 
     if not predicates:
         return "", []
@@ -247,6 +278,9 @@ def list_memories(
     tag: str = None,
     min_confidence: float = None,
     updated_since: str = None,
+    metadata_key: str = None,
+    metadata_value=None,
+    metadata_value_type: str = None,
     recency_half_life_hours: float = None,
 ) -> list:
     filter_predicate, filter_params = _build_memory_filter_predicate(
@@ -257,6 +291,9 @@ def list_memories(
         tag,
         min_confidence,
         updated_since,
+        metadata_key,
+        metadata_value,
+        metadata_value_type,
     )
     where_clause = ""
     query_params = list(filter_params)
@@ -267,7 +304,7 @@ def list_memories(
     query_params.extend(order_params)
     query_params.extend([limit, offset])
     rows = db.execute(
-        f"SELECT id, name, type, content, description, timestamp, confidence, owner_agent_id, visibility, status, tags, run_id, idempotency_key, verification_status, verification_source, verified_at "
+        f"SELECT id, name, type, content, description, timestamp, confidence, owner_agent_id, visibility, status, tags, run_id, idempotency_key, metadata_json, verification_status, verification_source, verified_at "
         f"FROM memories{where_clause} "
         f"{order_clause} "
         f"LIMIT ? OFFSET ?",
@@ -290,6 +327,9 @@ def list_memories_scoped(
     tag: str = None,
     min_confidence: float = None,
     updated_since: str = None,
+    metadata_key: str = None,
+    metadata_value=None,
+    metadata_value_type: str = None,
     recency_half_life_hours: float = None,
 ) -> list:
     """List memories with visibility scoping applied."""
@@ -302,6 +342,9 @@ def list_memories_scoped(
         tag,
         min_confidence,
         updated_since,
+        metadata_key,
+        metadata_value,
+        metadata_value_type,
     )
     if filter_predicate:
         predicate = f"{predicate} AND {filter_predicate}"
@@ -311,7 +354,7 @@ def list_memories_scoped(
 
     rows = db.execute(
         f"SELECT id, name, type, content, description, timestamp, confidence, "
-        f"owner_agent_id, visibility, status, tags, run_id, idempotency_key, verification_status, verification_source, verified_at FROM memories "
+        f"owner_agent_id, visibility, status, tags, run_id, idempotency_key, metadata_json, verification_status, verification_source, verified_at FROM memories "
         f"WHERE {predicate} "
         f"{order_clause} "
         f"LIMIT ? OFFSET ?",
@@ -332,9 +375,10 @@ def list_memories_scoped(
             "tags": r[10],
             "run_id": r[11],
             "idempotency_key": r[12],
-            "verification_status": r[13],
-            "verification_source": r[14],
-            "verified_at": r[15],
+            "metadata_json": r[13],
+            "verification_status": r[14],
+            "verification_source": r[15],
+            "verified_at": r[16],
         }
         for r in rows
     ]
@@ -355,6 +399,9 @@ def fts_search_memories_scoped(
     tag: str = None,
     min_confidence: float = None,
     updated_since: str = None,
+    metadata_key: str = None,
+    metadata_value=None,
+    metadata_value_type: str = None,
     recency_half_life_hours: float = None,
 ) -> list:
     """FTS search on memories with visibility scoping."""
@@ -367,6 +414,9 @@ def fts_search_memories_scoped(
         tag,
         min_confidence,
         updated_since,
+        metadata_key,
+        metadata_value,
+        metadata_value_type,
     )
     if filter_predicate:
         predicate = f"{predicate} AND {filter_predicate}"
@@ -421,11 +471,12 @@ def insert_memory(
     tags: str = "",
     run_id: str = None,
     idempotency_key: str = None,
+    metadata_json: str = "{}",
 ) -> int:
     cur = db.execute(
         "INSERT INTO memories ("
-        "name, type, content, description, confidence, owner_agent_id, visibility, tags, run_id, idempotency_key"
-        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "name, type, content, description, confidence, owner_agent_id, visibility, tags, run_id, idempotency_key, metadata_json"
+        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             name,
             type_,
@@ -437,6 +488,7 @@ def insert_memory(
             tags,
             run_id,
             idempotency_key,
+            metadata_json,
         ),
     )
     db.commit()

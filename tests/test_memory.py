@@ -96,6 +96,26 @@ def test_create_memory_idempotency_key_replays_existing_row(client):
     assert second.get_json()["idempotent_replay"] is True
 
 
+def test_create_memory_accepts_metadata_object(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(metadata={"priority": "high", "attempt": 2, "urgent": True}),
+    )
+    assert resp.status_code == 201
+
+    items = client.get("/memory/list").get_json()
+    created = next(i for i in items if i["id"] == resp.get_json()["id"])
+    assert "metadata_json" in created
+
+
+def test_create_memory_rejects_non_object_metadata(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(metadata="not-an-object"),
+    )
+    assert resp.status_code == 400
+
+
 # ---------------------------------------------------------------------------
 # GET /memory/list
 # ---------------------------------------------------------------------------
@@ -177,6 +197,64 @@ def test_list_memories_filters_by_min_confidence(client):
 
     items = client.get("/memory/list?min_confidence=0.5").get_json()
     assert all(i["confidence"] >= 0.5 for i in items)
+
+
+def test_list_memories_filters_by_metadata_string_value(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="m-string-1", metadata={"priority": "high"}),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="m-string-2", metadata={"priority": "low"}),
+    )
+
+    items = client.get(
+        "/memory/list?metadata_key=priority&metadata_value=high&metadata_value_type=string"
+    ).get_json()
+    assert len(items) == 1
+    assert items[0]["name"] == "m-string-1"
+
+
+def test_list_memories_filters_by_metadata_number_value(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="m-num-1", metadata={"attempt": 2}),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="m-num-2", metadata={"attempt": 1}),
+    )
+
+    items = client.get(
+        "/memory/list?metadata_key=attempt&metadata_value=2&metadata_value_type=number"
+    ).get_json()
+    assert len(items) == 1
+    assert items[0]["name"] == "m-num-1"
+
+
+def test_list_memories_filters_by_metadata_boolean_value(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="m-bool-1", metadata={"urgent": True}),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="m-bool-2", metadata={"urgent": False}),
+    )
+
+    items = client.get(
+        "/memory/list?metadata_key=urgent&metadata_value=true&metadata_value_type=boolean"
+    ).get_json()
+    assert len(items) == 1
+    assert items[0]["name"] == "m-bool-1"
+
+
+def test_list_memories_rejects_invalid_metadata_value_type(client):
+    resp = client.get(
+        "/memory/list?metadata_key=priority&metadata_value=high&metadata_value_type=array"
+    )
+    assert resp.status_code == 400
 
 
 # ---------------------------------------------------------------------------

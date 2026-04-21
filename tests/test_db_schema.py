@@ -247,6 +247,7 @@ class TestMemoriesColumns:
         "tags",
         "run_id",
         "idempotency_key",
+        "metadata_json",
         "owner_agent_id",
         "visibility",
         "updated_at",
