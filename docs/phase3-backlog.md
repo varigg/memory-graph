@@ -84,6 +84,10 @@ Current status note:
 - The repository is ahead of this original minimum slice in a few areas.
 - Retrieval controls now also include `run_id`, `tag`, `min_confidence`,
   `updated_since`, and `recency_half_life_hours`.
+- Typed metadata support is implemented for both storage (`metadata`) and
+  retrieval (`metadata_key`, `metadata_value`, `metadata_value_type`).
+- Memory list/search/recall responses now include parsed `metadata` in
+  addition to raw `metadata_json` for client compatibility and ergonomics.
 - Lifecycle support now includes merge/supersede operations and verification
   state updates in addition to archive/invalidate.
 - Batch write support (`POST /memory/batch`) is implemented even though earlier
@@ -187,15 +191,17 @@ but are now present in the codebase:
   `recency_half_life_hours`
 - typed metadata write support (`metadata`) and typed metadata read filters
   (`metadata_key`, `metadata_value`, `metadata_value_type`)
+- parsed metadata response field (`metadata`) alongside `metadata_json` in
+  memory list/search/recall results
 - verification state updates via `POST /memory/verify`
 - merge/supersede lifecycle operations
 - restart-safe autonomous-agent operating guidance in `docs/agent-memory-ops.md`
 
 ## Suggested Sprint Order
 
-1. Sprint A: reconcile docs with implemented Phase 3B behavior
-2. Sprint B: P3C-1, P3C-2
-3. Sprint C: P3C-3
+1. Sprint A: P3C-1 request correlation id support
+2. Sprint B: deepen P3C-2 metrics beyond initial usefulness slice
+3. Sprint C: P3C-3 stale private memory cleanup
 4. Sprint D: harness-bridge primitives if/when goal/autonomy work begins
 
 ## Definition of Done (Phase 3 minimum)
@@ -208,6 +214,6 @@ but are now present in the codebase:
 Current interpretation:
 
 - M1 is complete.
-- M2 minimum is complete and partially exceeded.
+- M2 is complete and exceeded.
 - M3 has an initial metrics slice, but request correlation and broader ops
   visibility remain outstanding.
