@@ -26,6 +26,26 @@ def memory_usefulness_metrics():
     return jsonify(get_memory_usefulness_metrics(db)), 200
 
 
+@bp.route("/metrics/ops", methods=["GET"])
+def ops_metrics():
+    """Return per-route request counts, error counts, and latency summaries."""
+    raw = current_app.config.get("OPS_COUNTERS", {})
+    routes = []
+    for route_key, c in sorted(raw.items()):
+        n = c["requests"]
+        avg_ms = round(c["total_latency_ms"] / n, 3) if n > 0 else 0.0
+        routes.append(
+            {
+                "route": route_key,
+                "requests": n,
+                "errors": c["errors"],
+                "avg_latency_ms": avg_ms,
+                "total_latency_ms": round(c["total_latency_ms"], 3),
+            }
+        )
+    return jsonify({"routes": routes}), 200
+
+
 @bp.route("/graph", methods=["GET"])
 def graph():
     static_folder = current_app.static_folder or os.path.join(

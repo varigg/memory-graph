@@ -151,7 +151,7 @@ Current status note:
 
 ### P3C-2 Basic service metrics
 
-- **Status**: Initial slice implemented
+- **Status**: Implemented
 
 - **Priority**: P2
 - **Depends on**: none
@@ -217,5 +217,6 @@ Current interpretation:
 
 - M1 is complete.
 - M2 is complete and exceeded.
-- M3 has initial slices for request correlation and usefulness metrics; broader
-  route-level latency/error visibility still remains.
+- M3 is complete: request correlation (P3C-1) and route-level latency/error
+  counters (P3C-2) are both implemented. P3C-3 stale private cleanup remains
+  the next open item.

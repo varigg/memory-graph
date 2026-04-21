@@ -1,3 +1,4 @@
+import time
 import uuid
 
 from flask import Flask, g, jsonify, request
@@ -20,10 +21,13 @@ def create_app(db_path: str = None) -> Flask:
 
     CORS(app, origins=Config.CORS_ORIGINS)
 
+    app.config["OPS_COUNTERS"] = {}
+
     @app.before_request
     def attach_request_id():
         incoming = request.headers.get("X-Request-Id", "").strip()
         g.request_id = incoming or str(uuid.uuid4())
+        g.request_start_ns = time.monotonic_ns()
 
     @app.after_request
     def add_request_id_header(response):
@@ -37,6 +41,21 @@ def create_app(db_path: str = None) -> Flask:
                 request.path,
                 response.status_code,
             )
+
+        # Record route-level ops counters.
+        start_ns = getattr(g, "request_start_ns", None)
+        if start_ns is not None:
+            latency_ms = (time.monotonic_ns() - start_ns) / 1_000_000
+            rule = str(request.url_rule) if request.url_rule else request.path
+            route_key = f"{request.method} {rule}"
+            counters = app.config["OPS_COUNTERS"]
+            if route_key not in counters:
+                counters[route_key] = {"requests": 0, "errors": 0, "total_latency_ms": 0.0}
+            counters[route_key]["requests"] += 1
+            if response.status_code >= 400:
+                counters[route_key]["errors"] += 1
+            counters[route_key]["total_latency_ms"] += latency_ms
+
         return response
 
     @app.teardown_appcontext

@@ -234,6 +234,7 @@ Memory response metadata behavior:
 - `GET /health`
 - `GET /version`
 - `GET /metrics/memory-usefulness`
+- `GET /metrics/ops`
 - `GET /graph`
 
 Request correlation behavior:
@@ -241,6 +242,10 @@ Request correlation behavior:
 - every response includes `X-Request-Id`
 - clients may provide `X-Request-Id`; otherwise the server generates one
 - global error responses include `request_id` in the JSON body
+
+`GET /metrics/ops` returns per-route request counts, error counts, average
+latency, and total latency accumulated since the last server start. The
+counters are in-memory only and reset on restart.
 
 Memory usefulness metrics expose a lightweight scorecard for current memory
 usage quality, including:

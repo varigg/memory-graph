@@ -162,3 +162,66 @@ def test_memory_usefulness_metrics_reflects_memory_state(client):
     assert data["coverage_pct"]["run_tracked"] == 50.0
     assert data["coverage_pct"]["run_tracked_active"] == 50.0
     assert data["coverage_pct"]["verified"] == 50.0
+
+
+# ---------------------------------------------------------------------------
+# GET /metrics/ops
+# ---------------------------------------------------------------------------
+
+def test_ops_metrics_returns_200(client):
+    resp = client.get("/metrics/ops")
+    assert resp.status_code == 200
+
+
+def test_ops_metrics_returns_json_with_routes_list(client):
+    data = client.get("/metrics/ops").get_json()
+    assert "routes" in data
+    assert isinstance(data["routes"], list)
+
+
+def test_ops_metrics_records_request_after_hit(client):
+    client.get("/health")
+    data = client.get("/metrics/ops").get_json()
+    route_keys = [r["route"] for r in data["routes"]]
+    assert "GET /health" in route_keys
+
+
+def test_ops_metrics_request_count_increments(client):
+    client.get("/health")
+    client.get("/health")
+    data = client.get("/metrics/ops").get_json()
+    health_entry = next(r for r in data["routes"] if r["route"] == "GET /health")
+    assert health_entry["requests"] >= 2
+
+
+def test_ops_metrics_error_count_increments_on_4xx(client):
+    client.get("/no-such-route-xyz")
+    data = client.get("/metrics/ops").get_json()
+    # The 404 path is recorded; verify that errors are non-zero across all routes.
+    total_errors = sum(r["errors"] for r in data["routes"])
+    assert total_errors >= 1
+
+
+def test_ops_metrics_route_entry_has_expected_fields(client):
+    client.get("/health")
+    data = client.get("/metrics/ops").get_json()
+    health_entry = next(r for r in data["routes"] if r["route"] == "GET /health")
+    assert "requests" in health_entry
+    assert "errors" in health_entry
+    assert "avg_latency_ms" in health_entry
+    assert "total_latency_ms" in health_entry
+
+
+def test_ops_metrics_avg_latency_is_non_negative(client):
+    client.get("/health")
+    data = client.get("/metrics/ops").get_json()
+    health_entry = next(r for r in data["routes"] if r["route"] == "GET /health")
+    assert health_entry["avg_latency_ms"] >= 0.0
+
+
+def test_ops_metrics_total_latency_gte_avg(client):
+    client.get("/health")
+    client.get("/health")
+    data = client.get("/metrics/ops").get_json()
+    health_entry = next(r for r in data["routes"] if r["route"] == "GET /health")
+    assert health_entry["total_latency_ms"] >= health_entry["avg_latency_ms"]
