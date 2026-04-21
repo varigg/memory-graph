@@ -139,6 +139,8 @@ Current status note:
 
 ### P3C-1 Request correlation id
 
+- **Status**: Initial slice implemented
+
 - **Priority**: P2
 - **Depends on**: none
 - **Scope**:
@@ -215,5 +217,5 @@ Current interpretation:
 
 - M1 is complete.
 - M2 is complete and exceeded.
-- M3 has an initial metrics slice, but request correlation and broader ops
-  visibility remain outstanding.
+- M3 has initial slices for request correlation and usefulness metrics; broader
+  route-level latency/error visibility still remains.

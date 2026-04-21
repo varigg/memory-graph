@@ -278,26 +278,62 @@ class TestErrorHandler:
     def client(self, app_with_bomb):
         return app_with_bomb.test_client()
 
-    def test_500_returns_json_body(self, client):
-        resp = client.get("/test/boom")
+
+class TestRequestCorrelationId:
+    @pytest.fixture()
+    def client(self, tmp_path):
+        return make_app(tmp_path / "reqid.db").test_client()
+
+    @pytest.fixture()
+    def bomb_client(self, tmp_path):
+        app = make_app(tmp_path / "reqid_err.db")
+        app.config["TESTING"] = True
+        app.config["PROPAGATE_EXCEPTIONS"] = False
+
+        @app.route("/test/boom")
+        def boom():
+            raise RuntimeError("deliberate boom")
+
+        return app.test_client()
+
+    def test_health_response_includes_request_id_header(self, client):
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.headers.get("X-Request-Id")
+
+    def test_request_id_header_is_echoed_when_provided(self, client):
+        custom_id = "req-test-123"
+        resp = client.get("/health", headers={"X-Request-Id": custom_id})
+        assert resp.status_code == 200
+        assert resp.headers.get("X-Request-Id") == custom_id
+
+    def test_not_found_error_includes_request_id_in_body(self, client):
+        resp = client.get("/missing-endpoint")
+        body = resp.get_json()
+        assert resp.status_code == 404
+        assert body.get("error") == "Not found"
+        assert body.get("request_id") == resp.headers.get("X-Request-Id")
+
+    def test_500_returns_json_body(self, bomb_client):
+        resp = bomb_client.get("/test/boom")
         assert resp.status_code == 500
         data = resp.get_json()
         assert data is not None
         assert "error" in data
 
-    def test_500_content_type_is_json(self, client):
-        resp = client.get("/test/boom")
+    def test_500_content_type_is_json(self, bomb_client):
+        resp = bomb_client.get("/test/boom")
         assert resp.status_code == 500
         assert "application/json" in resp.content_type
 
-    def test_500_body_is_not_html(self, client):
-        resp = client.get("/test/boom")
+    def test_500_body_is_not_html(self, bomb_client):
+        resp = bomb_client.get("/test/boom")
         assert resp.status_code == 500
         assert b"<!DOCTYPE" not in resp.data
         assert b"<html" not in resp.data
 
-    def test_500_error_key_contains_message(self, client):
-        resp = client.get("/test/boom")
+    def test_500_error_key_contains_message(self, bomb_client):
+        resp = bomb_client.get("/test/boom")
         data = resp.get_json()
         assert isinstance(data["error"], str)
         assert len(data["error"]) > 0

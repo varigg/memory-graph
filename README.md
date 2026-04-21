@@ -236,6 +236,12 @@ Memory response metadata behavior:
 - `GET /metrics/memory-usefulness`
 - `GET /graph`
 
+Request correlation behavior:
+
+- every response includes `X-Request-Id`
+- clients may provide `X-Request-Id`; otherwise the server generates one
+- global error responses include `request_id` in the JSON body
+
 Memory usefulness metrics expose a lightweight scorecard for current memory
 usage quality, including:
 
@@ -284,10 +290,11 @@ Phase 3 starts with multi-agent memory usability for local trusted agents
   - API and schema additions for visibility filtering now active
 - **3B Retrieval Quality + Lifecycle (implemented)**
   - Visibility/owner/status filters, archive/invalidate/merge/supersede lifecycle operations, and memory ranking hints
-- **3C Scale + Ops (planned, mostly optional/defer for current scale)**
-  - Async enrichment pipeline and queueing
-  - Cursor pagination for larger recall workloads
-  - Observability and maintenance jobs
+- **3C Scale + Ops (implemented initial slice + planned follow-ups)**
+  - Implemented initial slice: request correlation IDs (`X-Request-Id`) and
+    memory usefulness observability
+  - Planned follow-ups: broader request latency/error counters and
+    maintenance/cleanup jobs
 
 See:
 

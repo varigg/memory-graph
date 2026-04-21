@@ -1,4 +1,6 @@
-from flask import Flask, g, jsonify
+import uuid
+
+from flask import Flask, g, jsonify, request
 from flask_cors import CORS
 
 import db_schema
@@ -18,6 +20,25 @@ def create_app(db_path: str = None) -> Flask:
 
     CORS(app, origins=Config.CORS_ORIGINS)
 
+    @app.before_request
+    def attach_request_id():
+        incoming = request.headers.get("X-Request-Id", "").strip()
+        g.request_id = incoming or str(uuid.uuid4())
+
+    @app.after_request
+    def add_request_id_header(response):
+        request_id = getattr(g, "request_id", None)
+        if request_id:
+            response.headers["X-Request-Id"] = request_id
+            app.logger.info(
+                "request_id=%s method=%s path=%s status=%s",
+                request_id,
+                request.method,
+                request.path,
+                response.status_code,
+            )
+        return response
+
     @app.teardown_appcontext
     def close_db(e=None):
         db = g.pop("db", None)
@@ -26,19 +47,19 @@ def create_app(db_path: str = None) -> Flask:
 
     @app.errorhandler(500)
     def internal_error(e):
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": "Internal server error", "request_id": getattr(g, "request_id", None)}), 500
 
     @app.errorhandler(404)
     def not_found(e):
-        return jsonify({"error": "Not found"}), 404
+        return jsonify({"error": "Not found", "request_id": getattr(g, "request_id", None)}), 404
 
     @app.errorhandler(405)
     def method_not_allowed(e):
-        return jsonify({"error": "Method not allowed"}), 405
+        return jsonify({"error": "Method not allowed", "request_id": getattr(g, "request_id", None)}), 405
 
     @app.errorhandler(413)
     def payload_too_large(e):
-        return jsonify({"error": "Request payload too large"}), 413
+        return jsonify({"error": "Request payload too large", "request_id": getattr(g, "request_id", None)}), 413
 
     from blueprints.conversations import bp as conversations_bp
     from blueprints.kv import bp as kv_bp

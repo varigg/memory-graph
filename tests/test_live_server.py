@@ -114,6 +114,24 @@ class TestHealth:
         assert r.status_code == 200
         assert "text/html" in r.headers["Content-Type"]
 
+    def test_health_includes_request_id_header(self, base):
+        r = requests.get(f"{base}/health")
+        assert r.status_code == 200
+        assert r.headers.get("X-Request-Id")
+
+    def test_request_id_header_round_trips(self, base):
+        custom = "live-req-id-001"
+        r = requests.get(f"{base}/health", headers={"X-Request-Id": custom})
+        assert r.status_code == 200
+        assert r.headers.get("X-Request-Id") == custom
+
+    def test_404_includes_request_id_in_body(self, base):
+        r = requests.get(f"{base}/missing")
+        assert r.status_code == 404
+        body = r.json()
+        assert body.get("error") == "Not found"
+        assert body.get("request_id") == r.headers.get("X-Request-Id")
+
 
 # ---------------------------------------------------------------------------
 # Memory CRUD
