@@ -142,12 +142,12 @@ safer inputs for future transactional and verification-related work.
 
 ## Risks and Mitigation
 
-| Risk | Mitigation |
-| ---- | ---------- |
-| Validation refactor changes current API behavior unexpectedly | Preserve field names and response semantics first; tighten only with explicit doc updates |
-| Pydantic error output is too verbose or unstable for clients | Normalize error responses before returning them from blueprints |
-| Query parameter parsing becomes harder to read | Introduce small typed parsing objects rather than one overly large schema |
-| Migration scope expands too far | Start with write/lifecycle paths and only extend read/filter flows where duplication is real |
+| Risk                                                          | Mitigation                                                                                   |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Validation refactor changes current API behavior unexpectedly | Preserve field names and response semantics first; tighten only with explicit doc updates    |
+| Pydantic error output is too verbose or unstable for clients  | Normalize error responses before returning them from blueprints                              |
+| Query parameter parsing becomes harder to read                | Introduce small typed parsing objects rather than one overly large schema                    |
+| Migration scope expands too far                               | Start with write/lifecycle paths and only extend read/filter flows where duplication is real |
 
 ## Suggested Follow-Ons After This Plan
 

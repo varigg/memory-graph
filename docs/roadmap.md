@@ -15,6 +15,7 @@ Use this file when you want the current state of the project in one place:
 - `docs/architecture.md` is the current architecture narrative and system-boundary document.
 - `docs/adr/README.md` is the index of durable architecture decision records.
 - `docs/phase1-2-consolidated.md` is the retrospective summary of early review and implementation work.
+- `docs/phase3-consolidated.md` is the consolidated retrospective summary of Phase 3 implementation, rationale, and decisions.
 - `docs/phase3-backlog.md` is the detailed Phase 3 task breakdown.
 - `docs/conversation-outcomes.md` records major discussion outcomes and rationale.
 - `harness.md` is the target-state autonomous-agent vision.
