@@ -109,8 +109,8 @@ Do not write to the service speculatively or on every turn. Write only when ther
 ## Session continuity hints
 
 - At the start of substantial work or resumed sessions, read context first with:
-	- `GET /memory/list?agent_id=copilot&status=active&limit=20`
-	- and targeted `GET /memory/recall?...` for the active topic/run.
+  - `GET /memory/list?agent_id=copilot&status=active&limit=20`
+  - and targeted `GET /memory/recall?...` for the active topic/run.
 - Also check `GET /metrics/memory-usefulness` at session start or milestone boundaries to see whether memory workflow conventions are actually being followed.
 - During substantial work, write durable checkpoints (decision, implementation milestone, verification outcome), not chat transcripts.
 - For substantial work, prefer checkpoint writes that include `run_id`, `idempotency_key`, and `tags` so the usefulness scorecard becomes meaningful over time.

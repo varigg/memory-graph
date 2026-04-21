@@ -9,6 +9,7 @@ SQLite, supports FTS5 and semantic retrieval, and exposes a small web UI.
 Use these documents as the canonical reading path for the project:
 
 - `README.md` — current API surface, runtime workflow, and project status
+- `docs/roadmap.md` — canonical living feature tracker across implemented, planned, and deferred work
 - `docs/conversation-outcomes.md` — durable summary of design-discussion outcomes and where they landed
 - `docs/phase1-2-consolidated.md` — consolidated review and implementation summary for the original backend foundation and hardening work
 - `docs/phase3-overview.md` — Phase 3 direction and multi-agent memory evolution
@@ -20,7 +21,7 @@ Use these documents as the canonical reading path for the project:
 - `harness.md` — target autonomous-agent harness vision that this backend is intended to support over time
 - `.github/copilot-instructions.md` — Copilot-specific session continuity and shared-memory usage hints for this repo
 
-If you want the shortest end-to-end overview, read this file first, then `docs/conversation-outcomes.md`, then `docs/phase1-2-consolidated.md`, then `docs/phase3-overview.md`, then `docs/agent-memory-ops.md`, and finally `harness.md`.
+If you want the shortest end-to-end overview, read this file first, then `docs/roadmap.md`, then `docs/conversation-outcomes.md`, then `docs/phase1-2-consolidated.md`, then `docs/phase3-overview.md`, then `docs/agent-memory-ops.md`, and finally `harness.md`.
 
 ## Quick Start
 
@@ -322,6 +323,7 @@ memory-graph/
 │   ├── agent-memory-ops.md
 │   ├── conversation-outcomes.md
 │   ├── phase1-2-consolidated.md
+│   ├── roadmap.md
 │   ├── phase3a.md
 │   ├── phase3a-pr-chunks.md
 │   ├── phase3b.md
