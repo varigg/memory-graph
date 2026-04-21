@@ -6,9 +6,7 @@ import sqlite3
 import pytest
 
 from services.memory_lifecycle_service import (
-    promote_memory_to_shared,
     relate_memory_lifecycle,
-    set_memory_verification,
     transition_memory_status,
 )
 from storage.conversation_repository import (
@@ -24,12 +22,9 @@ from storage.memory_repository import (
     _build_scope_predicate,
     fts_search_memories,
     fts_search_memories_scoped,
-    get_memory_by_idempotency_key,
     insert_memory,
-    list_memories,
     list_memories_scoped,
 )
-from storage.metrics_repository import get_memory_usefulness_metrics
 
 # ---------------------------------------------------------------------------
 # Fixtures

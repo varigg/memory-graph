@@ -17,7 +17,13 @@ retained for reference only and are not active planning documents.
 
 ## Milestone M1 — Phase 3A Core (Required)
 
+Current status note:
+
+- M1 is complete (2026-04-21).
+
 ### P3A-1 Schema: ownership + visibility columns
+
+- **Status**: Implemented
 
 - **Priority**: P0
 - **Depends on**: none
@@ -33,6 +39,8 @@ retained for reference only and are not active planning documents.
 
 ### P3A-2 API: scoped write semantics
 
+- **Status**: Implemented
+
 - **Priority**: P0
 - **Depends on**: P3A-1
 - **Scope**:
@@ -44,6 +52,8 @@ retained for reference only and are not active planning documents.
   - invalid payloads return `400` with clear errors
 
 ### P3A-3 API: scoped read semantics
+
+- **Status**: Implemented
 
 - **Priority**: P0
 - **Depends on**: P3A-1
@@ -58,6 +68,8 @@ retained for reference only and are not active planning documents.
 
 ### P3A-4 API: promote-to-shared flow
 
+- **Status**: Implemented
+
 - **Priority**: P1
 - **Depends on**: P3A-1, P3A-3
 - **Scope**:
@@ -69,6 +81,8 @@ retained for reference only and are not active planning documents.
   - non-owner promotion rejected (`403` or `404` per chosen policy)
 
 ### P3A-5 Test coverage + docs refresh
+
+- **Status**: Implemented
 
 - **Priority**: P0
 - **Depends on**: P3A-2, P3A-3, P3A-4
@@ -226,9 +240,13 @@ but are now present in the codebase:
 1. Sprint A: operational adoption of memory signals so the usefulness scorecard becomes meaningful in real workflows (complete; 2026-04-21)
    - See `docs/plans/sprint-a-memory-signal-adoption.md` for implementation plan
 2. Sprint B: P3C-3 stale private memory cleanup (complete; 2026-04-21)
-  - See `docs/plans/sprint-b-stale-private-memory-cleanup.md` for implementation details and validation
+
+- See `docs/plans/sprint-b-stale-private-memory-cleanup.md` for implementation details and validation
+
 3. Sprint C: P3C-4 additional operational maintenance follow-ons (in progress; started 2026-04-21)
-  - Completed: integrity checks endpoint, SQLite maintenance helper, deeper ops signals (retrieval/db-lock/dedupe)
+
+- Completed: integrity checks endpoint, SQLite maintenance helper, deeper ops signals (retrieval/db-lock/dedupe)
+
 4. Sprint D: harness-bridge primitives if/when goal/autonomy work begins
 
 ## Definition of Done (Phase 3 minimum)

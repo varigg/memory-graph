@@ -9,10 +9,10 @@ from services.memory_lifecycle_service import (
     set_memory_verification,
     transition_memory_status,
 )
-from services.ops_metrics_service import record_retrieval_observation
 from services.memory_retrieval_service import list_memories as list_memories_service
 from services.memory_retrieval_service import recall_memories, search_memories
 from services.memory_write_service import create_or_get_memory, parse_memory_payload
+from services.ops_metrics_service import record_retrieval_observation
 from storage.entity_repository import insert_entity, search_entities
 
 bp = Blueprint("memory", __name__)

@@ -1,11 +1,14 @@
-import sqlite3
 import os
+import sqlite3
 
 from flask import Blueprint, current_app, jsonify, request
 
 from db_utils import get_db
 from services.ops_metrics_service import build_ops_signals_snapshot
-from storage.metrics_repository import get_integrity_report, get_memory_usefulness_metrics
+from storage.metrics_repository import (
+    get_integrity_report,
+    get_memory_usefulness_metrics,
+)
 
 bp = Blueprint("utility", __name__)
 
