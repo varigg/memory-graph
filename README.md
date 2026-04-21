@@ -223,7 +223,17 @@ Idempotency behavior for memory writes:
 - `PUT /kv/<key>` with body `{"value": ...}`
 - `GET /health`
 - `GET /version`
+- `GET /metrics/memory-usefulness`
 - `GET /graph`
+
+Memory usefulness metrics expose a lightweight scorecard for current memory
+usage quality, including:
+
+- active/shared/private memory counts
+- adoption signals for `run_id`, `idempotency_key`, and `tags`
+- trust signals for reviewed and verified memories
+- coverage percentages showing how much of the memory corpus uses these
+  conventions
 
 ## Phase 2 Summary
 

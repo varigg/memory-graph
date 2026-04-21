@@ -2,6 +2,9 @@ import os
 
 from flask import Blueprint, current_app, jsonify
 
+from db_operations import get_memory_usefulness_metrics
+from db_utils import get_db
+
 bp = Blueprint("utility", __name__)
 
 _VERSION = "0.1.0"
@@ -15,6 +18,12 @@ def health():
 @bp.route("/version", methods=["GET"])
 def version():
     return jsonify({"version": _VERSION}), 200
+
+
+@bp.route("/metrics/memory-usefulness", methods=["GET"])
+def memory_usefulness_metrics():
+    db = get_db()
+    return jsonify(get_memory_usefulness_metrics(db)), 200
 
 
 @bp.route("/graph", methods=["GET"])

@@ -79,7 +79,19 @@ Related implementation breakdown:
 
 ## Milestone M2 — Phase 3B Minimum Slice (Partially Required)
 
+Current status note:
+
+- The repository is ahead of this original minimum slice in a few areas.
+- Retrieval controls now also include `run_id`, `tag`, `min_confidence`,
+  `updated_since`, and `recency_half_life_hours`.
+- Lifecycle support now includes merge/supersede operations and verification
+  state updates in addition to archive/invalidate.
+- Batch write support (`POST /memory/batch`) is implemented even though earlier
+  planning treated bulk mutation APIs as deferrable.
+
 ### P3B-1 Retrieval filters (visibility/owner/status)
+
+- **Status**: Implemented and exceeded
 
 - **Priority**: P1
 - **Depends on**: M1
@@ -94,6 +106,8 @@ Related implementation breakdown:
 
 ### P3B-2 Archive/invalidate lifecycle endpoints
 
+- **Status**: Implemented and exceeded
+
 - **Priority**: P1
 - **Depends on**: M1
 - **Scope**:
@@ -105,6 +119,8 @@ Related implementation breakdown:
   - archived/invalidated records obey retrieval filters
 
 ### P3B-3 Lightweight ranking enhancement
+
+- **Status**: Implemented minimum slice and extended
 
 - **Priority**: P2
 - **Depends on**: P3B-1
@@ -129,11 +145,14 @@ Related implementation breakdown:
 
 ### P3C-2 Basic service metrics
 
+- **Status**: Initial slice implemented
+
 - **Priority**: P2
 - **Depends on**: none
 - **Scope**:
   - endpoint latency and error counters
   - memory-scope usage counters (shared vs private)
+  - memory usefulness scorecard for adoption/trust coverage
 - **Acceptance criteria**:
   - metrics endpoint or log summaries documented
   - smoke tests verify instrumentation paths
@@ -152,18 +171,31 @@ Related implementation breakdown:
 ## Deferred Items (Not Needed Now)
 
 - async queue architecture for embedding/enrichment
-- bulk mutation APIs
 - cursor pagination migration
 - enterprise auth/tenant controls
 - ranking explainability fields in search results (`rank_components`, `match_reasons`)
-- additional retrieval filters: `min_confidence`, `updated_since`, `tags`
+- typed metadata/JSON filtering beyond current `run_id`/`tag` string filters
+- formal verifier evidence model beyond the current verification status fields
+
+## Implemented Beyond Original Backlog Text
+
+These items were originally absent from the backlog or described as future work,
+but are now present in the codebase:
+
+- `POST /memory/batch` for grouped writes
+- write idempotency via `idempotency_key`
+- retrieval filters for `run_id`, `tag`, `min_confidence`, `updated_since`, and
+  `recency_half_life_hours`
+- verification state updates via `POST /memory/verify`
+- merge/supersede lifecycle operations
+- restart-safe autonomous-agent operating guidance in `docs/agent-memory-ops.md`
 
 ## Suggested Sprint Order
 
-1. Sprint A: P3A-1, P3A-2, P3A-3
-2. Sprint B: P3A-4, P3A-5, P3B-1
-3. Sprint C: P3B-2, P3B-3, P3C-1
-4. Sprint D: P3C-2, P3C-3
+1. Sprint A: reconcile docs with implemented Phase 3B behavior
+2. Sprint B: P3C-1, P3C-2
+3. Sprint C: P3C-3
+4. Sprint D: harness-bridge primitives if/when goal/autonomy work begins
 
 ## Definition of Done (Phase 3 minimum)
 
@@ -171,3 +203,10 @@ Related implementation breakdown:
 - M2 complete for P3B-1 and P3B-2 at minimum
 - M3 complete for P3C-1 and P3C-2 at minimum
 - documentation updated and full suite green
+
+Current interpretation:
+
+- M1 is complete.
+- M2 minimum is complete and partially exceeded.
+- M3 has an initial metrics slice, but request correlation and broader ops
+  visibility remain outstanding.
