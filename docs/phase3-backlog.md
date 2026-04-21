@@ -243,11 +243,14 @@ but are now present in the codebase:
 
 - See `docs/plans/sprint-b-stale-private-memory-cleanup.md` for implementation details and validation
 
-3. Sprint C: P3C-4 additional operational maintenance follow-ons (in progress; started 2026-04-21)
+3. Sprint C: P3C-4 additional operational maintenance follow-ons (complete; 2026-04-21)
 
 - Completed: integrity checks endpoint, SQLite maintenance helper, deeper ops signals (retrieval/db-lock/dedupe)
 
-4. Sprint D: harness-bridge primitives if/when goal/autonomy work begins
+Phase 3 closure note:
+
+- Phase 3 is complete after Sprint C.
+- Harness-bridge primitives are not Phase 3 backlog items and should be scoped under Phase 4 planning.
 
 ## Definition of Done (Phase 3 minimum)
 
@@ -263,3 +266,4 @@ Current interpretation:
 - M3 is complete: request correlation (P3C-1) and route-level latency/error
   counters (P3C-2) are both implemented. P3C-3 stale private cleanup is now
   implemented.
+- Phase 3 is complete; remaining harness-goal/autonomy bridge work is Phase 4+.
