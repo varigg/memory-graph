@@ -61,11 +61,25 @@ then update this roadmap and the stale doc.
 2. Sprint A complete (2026-04-21).
 3. Sprint B complete (2026-04-21): stale private memory cleanup job with dry-run mode and deletion summary (P3C-3).
 4. Sprint C complete (2026-04-21): P3C-4 operational maintenance follow-ons implemented.
-5. Phase 3 is complete; future harness-bridge work is explicitly Phase 4+ scope.
+5. Phase 3 is complete; future harness-bridge work is explicitly post-Phase-3 scope.
 
-## Phase 4 and Beyond
+## Future Planned Work
 
-Phase 4 will be scoped once Phase 3 is complete. Future work may include:
+The next planned feature is Pydantic validation at the service boundary:
+
+- see `docs/plans/pydantic-service-boundary-validation.md`
+
+Recommended implementation order after Phase 3:
+
+1. Pydantic schema validation (typed request models and consistent service-boundary validation)
+2. Transactional write guarantees (atomic multi-row operations for batch and lifecycle flows)
+3. Richer verifier evidence model (explicit evidence records beyond status/source)
+4. SQLite runtime hardening (connection pragmas and local-concurrency safeguards)
+5. Authorization hardening (owner checks and write-path enforcement)
+6. Harness bridge primitives (goal/autonomy/action-log primitives) when autonomy work is explicitly scoped
+7. Full harness runtime only if this repository is intentionally expanded beyond the memory substrate role
+
+Additional future work may include:
 
 - Authorization hardening (owner checks on delete paths, consistent write enforcement)
 - Transactional write guarantees (atomic multi-row operations for batch and composite lifecycle flows)
@@ -76,10 +90,10 @@ Phase 4 will be scoped once Phase 3 is complete. Future work may include:
 - Harness bridge primitives (goal/autonomy/action-log primitives)
 - Full harness runtime (growth path if this becomes orchestrator)
 
-Future phases will be planned using feature-specific implementation plans rather than consolidated phase documents.
+Future work should be planned using feature-specific implementation plans rather than consolidated phase documents.
 
 ## Maintenance Rules
 
 1. **During Phase 3**: When a Phase 3 feature changes status, update this file in the same change set as the code or documentation change that caused the status change.
-2. **Planning Phase 4**: Once Phase 3 is complete, create a Phase 4 plan document that scopes the next priority items from the "Phase 4 and Beyond" list. Do not add future phase items to this roadmap until they are explicitly scoped.
-3. **Implementation plans**: For each Phase 4+ feature, create a feature-specific implementation plan rather than consolidating into a phase document. Store implementation plans in `docs/plans/` with the naming convention `<feature-name>.md`.
+2. **Post-Phase-3 planning**: Once Phase 3 is complete, scope subsequent work through feature-specific implementation plans rather than a new phase umbrella.
+3. **Implementation plans**: For each post-Phase-3 feature, create a feature-specific implementation plan. Store implementation plans in `docs/plans/` with the naming convention `<feature-name>.md`.
