@@ -9,6 +9,12 @@ from services.memory_lifecycle_service import (
     set_memory_verification,
     transition_memory_status,
 )
+from services.memory_request_models import (
+    parse_action_payload,
+    parse_cleanup_payload,
+    parse_relation_payload,
+    parse_verify_payload,
+)
 from services.memory_retrieval_service import list_memories as list_memories_service
 from services.memory_retrieval_service import recall_memories, search_memories
 from services.memory_write_service import create_or_get_memory, parse_memory_payload
@@ -73,18 +79,18 @@ def promote_memory(memory_id):
 @bp.route("/memory/archive", methods=["POST"])
 def archive_memory():
     data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-
-    memory_id = data.get("memory_id")
-    agent_id = data.get("agent_id")
-    if not isinstance(memory_id, int):
-        return jsonify({"error": "memory_id must be an integer"}), 400
-    if not isinstance(agent_id, str) or not agent_id.strip():
-        return jsonify({"error": "agent_id is required"}), 400
+    try:
+        payload = parse_action_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     db = get_db()
-    transitioned, err = transition_memory_status(db, memory_id, agent_id.strip(), "archived")
+    transitioned, err = transition_memory_status(
+        db,
+        payload["memory_id"],
+        payload["agent_id"],
+        "archived",
+    )
     if err == "not_found":
         return jsonify({"error": "not found"}), 404
     if err == "forbidden":
@@ -97,18 +103,18 @@ def archive_memory():
 @bp.route("/memory/invalidate", methods=["POST"])
 def invalidate_memory():
     data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-
-    memory_id = data.get("memory_id")
-    agent_id = data.get("agent_id")
-    if not isinstance(memory_id, int):
-        return jsonify({"error": "memory_id must be an integer"}), 400
-    if not isinstance(agent_id, str) or not agent_id.strip():
-        return jsonify({"error": "agent_id is required"}), 400
+    try:
+        payload = parse_action_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     db = get_db()
-    transitioned, err = transition_memory_status(db, memory_id, agent_id.strip(), "invalidated")
+    transitioned, err = transition_memory_status(
+        db,
+        payload["memory_id"],
+        payload["agent_id"],
+        "invalidated",
+    )
     if err == "not_found":
         return jsonify({"error": "not found"}), 404
     if err == "forbidden":
@@ -121,32 +127,18 @@ def invalidate_memory():
 @bp.route("/memory/cleanup-private", methods=["POST"])
 def cleanup_private_memories():
     data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-
-    retention_days = data.get("retention_days")
-    if not isinstance(retention_days, int):
-        return jsonify({"error": "retention_days must be an integer"}), 400
-
-    dry_run = data.get("dry_run", True)
-    if not isinstance(dry_run, bool):
-        return jsonify({"error": "dry_run must be a boolean when provided"}), 400
-
-    owner_agent_id = data.get("owner_agent_id")
-    if owner_agent_id is not None and not isinstance(owner_agent_id, str):
-        return jsonify({"error": "owner_agent_id must be a string when provided"}), 400
-
-    status = data.get("status", "active")
-    if not isinstance(status, str):
-        return jsonify({"error": "status must be a string when provided"}), 400
+    try:
+        payload = parse_cleanup_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     db = get_db()
     result, err = cleanup_stale_private_memories(
         db,
-        retention_days=retention_days,
-        dry_run=dry_run,
-        owner_agent_id=owner_agent_id,
-        status=status,
+        retention_days=payload["retention_days"],
+        dry_run=payload["dry_run"],
+        owner_agent_id=payload["owner_agent_id"],
+        status=payload["status"],
     )
     if err == "invalid_retention_days":
         return jsonify({"error": "retention_days must be > 0"}), 400
@@ -160,30 +152,18 @@ def cleanup_private_memories():
 @bp.route("/memory/verify", methods=["POST"])
 def verify_memory():
     data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-
-    memory_id = data.get("memory_id")
-    agent_id = data.get("agent_id")
-    verification_status = data.get("verification_status")
-    verification_source = data.get("verification_source")
-
-    if not isinstance(memory_id, int):
-        return jsonify({"error": "memory_id must be an integer"}), 400
-    if not isinstance(agent_id, str) or not agent_id.strip():
-        return jsonify({"error": "agent_id is required"}), 400
-    if verification_status not in {"unverified", "verified", "disputed"}:
-        return jsonify({"error": "verification_status must be 'unverified', 'verified', or 'disputed'"}), 400
-    if verification_source is not None and not isinstance(verification_source, str):
-        return jsonify({"error": "verification_source must be a string when provided"}), 400
+    try:
+        payload = parse_verify_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     db = get_db()
     verified, err = set_memory_verification(
         db,
-        memory_id,
-        agent_id.strip(),
-        verification_status,
-        verification_source,
+        payload["memory_id"],
+        payload["agent_id"],
+        payload["verification_status"],
+        payload["verification_source"],
     )
     if err == "not_found":
         return jsonify({"error": "not found"}), 404
@@ -195,28 +175,17 @@ def verify_memory():
 @bp.route("/memory/merge", methods=["POST"])
 def merge_memory():
     data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-
-    memory_id = data.get("memory_id")
-    target_memory_id = data.get("target_memory_id")
-    if target_memory_id is None:
-        target_memory_id = data.get("replacement_memory_id")
-
-    agent_id = data.get("agent_id")
-    if not isinstance(memory_id, int):
-        return jsonify({"error": "memory_id must be an integer"}), 400
-    if not isinstance(target_memory_id, int):
-        return jsonify({"error": "target_memory_id must be an integer"}), 400
-    if not isinstance(agent_id, str) or not agent_id.strip():
-        return jsonify({"error": "agent_id is required"}), 400
+    try:
+        payload = parse_relation_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     db = get_db()
     related, err = relate_memory_lifecycle(
         db,
-        memory_id,
-        target_memory_id,
-        agent_id.strip(),
+        payload["memory_id"],
+        payload["target_memory_id"],
+        payload["agent_id"],
         "merged_into",
     )
     if err in {"source_not_found", "target_not_found"}:
@@ -231,28 +200,17 @@ def merge_memory():
 @bp.route("/memory/supersede", methods=["POST"])
 def supersede_memory():
     data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "JSON body required"}), 400
-
-    memory_id = data.get("memory_id")
-    target_memory_id = data.get("target_memory_id")
-    if target_memory_id is None:
-        target_memory_id = data.get("replacement_memory_id")
-
-    agent_id = data.get("agent_id")
-    if not isinstance(memory_id, int):
-        return jsonify({"error": "memory_id must be an integer"}), 400
-    if not isinstance(target_memory_id, int):
-        return jsonify({"error": "target_memory_id must be an integer"}), 400
-    if not isinstance(agent_id, str) or not agent_id.strip():
-        return jsonify({"error": "agent_id is required"}), 400
+    try:
+        payload = parse_relation_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     db = get_db()
     related, err = relate_memory_lifecycle(
         db,
-        memory_id,
-        target_memory_id,
-        agent_id.strip(),
+        payload["memory_id"],
+        payload["target_memory_id"],
+        payload["agent_id"],
         "superseded_by",
     )
     if err in {"source_not_found", "target_not_found"}:
