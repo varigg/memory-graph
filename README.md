@@ -4,6 +4,24 @@ Memory Graph is a local-first Flask REST API for persistent agent memory.
 It stores conversations, memories, entities, embeddings, and key-value state in
 SQLite, supports FTS5 and semantic retrieval, and exposes a small web UI.
 
+## Documentation Guide
+
+Use these documents as the canonical reading path for the project:
+
+- `README.md` — current API surface, runtime workflow, and project status
+- `docs/conversation-outcomes.md` — durable summary of design-discussion outcomes and where they landed
+- `docs/phase1-2-consolidated.md` — consolidated review and implementation summary for the original backend foundation and hardening work
+- `docs/phase3-overview.md` — Phase 3 direction and multi-agent memory evolution
+- `docs/phase3a.md` — shared/private memory scopes and read semantics
+- `docs/phase3b.md` — retrieval quality and lifecycle operations
+- `docs/phase3c.md` — planned scale and ops follow-on work
+- `docs/phase3-backlog.md` — deferred and future work inventory
+- `docs/agent-memory-ops.md` — restart-safe autonomous-agent operating conventions for this service
+- `harness.md` — target autonomous-agent harness vision that this backend is intended to support over time
+- `.github/copilot-instructions.md` — Copilot-specific session continuity and shared-memory usage hints for this repo
+
+If you want the shortest end-to-end overview, read this file first, then `docs/conversation-outcomes.md`, then `docs/phase1-2-consolidated.md`, then `docs/phase3-overview.md`, then `docs/agent-memory-ops.md`, and finally `harness.md`.
+
 ## Quick Start
 
 ### Using uv (recommended)
@@ -258,6 +276,7 @@ See:
 - `docs/phase3-overview.md`
 - `docs/phase3-backlog.md`
 - `docs/agent-memory-ops.md` (autonomous-agent operational usage and restart guide)
+- `harness.md` (target harness design this service is expected to support)
 
 ## Testing
 
@@ -281,6 +300,7 @@ memory-graph/
 ├── db_schema.py
 ├── db_utils.py
 ├── embeddings.py
+├── harness.md
 ├── requirements.txt
 ├── blueprints/
 │   ├── conversations.py
@@ -289,6 +309,8 @@ memory-graph/
 │   ├── search.py
 │   └── utility.py
 ├── docs/
+│   ├── agent-memory-ops.md
+│   ├── conversation-outcomes.md
 │   ├── phase1-2-consolidated.md
 │   ├── phase3a.md
 │   ├── phase3a-pr-chunks.md
