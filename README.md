@@ -242,6 +242,8 @@ usage quality, including:
 - active/shared/private memory counts
 - adoption signals for `run_id`, `idempotency_key`, and `tags`
 - trust signals for reviewed and verified memories
+- run-level signals (`distinct_runs`, active run-tracked count, top run IDs)
+- freshness signals for recent vs stale memory updates
 - coverage percentages showing how much of the memory corpus uses these
   conventions
 

@@ -84,12 +84,16 @@ def test_memory_usefulness_metrics_returns_json_shape(client):
     assert "memory_counts" in data
     assert "adoption_signals" in data
     assert "trust_signals" in data
+    assert "run_signals" in data
+    assert "freshness_signals" in data
     assert "coverage_pct" in data
 
 
 def test_memory_usefulness_metrics_empty_db_is_zeroed(client):
     data = client.get("/metrics/memory-usefulness").get_json()
     assert data["memory_counts"]["total"] == 0
+    assert data["run_signals"]["distinct_runs"] == 0
+    assert data["freshness_signals"]["updated_last_24h"] == 0
     assert data["coverage_pct"]["run_tracked"] == 0.0
     assert data["coverage_pct"]["verified"] == 0.0
 
@@ -150,5 +154,11 @@ def test_memory_usefulness_metrics_reflects_memory_state(client):
     assert data["adoption_signals"]["tagged"] == 1
     assert data["trust_signals"]["verified"] == 1
     assert data["trust_signals"]["reviewed"] == 1
+    assert data["run_signals"]["distinct_runs"] == 1
+    assert data["run_signals"]["active_run_tracked"] == 1
+    assert data["run_signals"]["top_runs"][0]["run_id"] == "run-1"
+    assert data["run_signals"]["top_runs"][0]["memory_count"] == 1
+    assert data["freshness_signals"]["updated_last_7d"] == 2
     assert data["coverage_pct"]["run_tracked"] == 50.0
+    assert data["coverage_pct"]["run_tracked_active"] == 50.0
     assert data["coverage_pct"]["verified"] == 50.0

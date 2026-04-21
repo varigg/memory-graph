@@ -68,6 +68,33 @@ def get_memory_usefulness_metrics(db: sqlite3.Connection) -> dict:
     disputed_memories = _value("disputed_memories")
     reviewed_memories = _value("reviewed_memories")
 
+    run_stats = db.execute(
+        "SELECT "
+        "COUNT(DISTINCT run_id) AS distinct_runs, "
+        "SUM(CASE WHEN status = 'active' AND NULLIF(TRIM(COALESCE(run_id, '')), '') IS NOT NULL THEN 1 ELSE 0 END) AS active_run_tracked_memories "
+        "FROM memories "
+        "WHERE NULLIF(TRIM(COALESCE(run_id, '')), '') IS NOT NULL"
+    ).fetchone()
+
+    freshness = db.execute(
+        "SELECT "
+        "SUM(CASE WHEN julianday('now') - julianday(COALESCE(updated_at, timestamp)) <= 1 THEN 1 ELSE 0 END) AS updated_last_24h, "
+        "SUM(CASE WHEN julianday('now') - julianday(COALESCE(updated_at, timestamp)) <= 7 THEN 1 ELSE 0 END) AS updated_last_7d, "
+        "SUM(CASE WHEN julianday('now') - julianday(COALESCE(updated_at, timestamp)) > 7 THEN 1 ELSE 0 END) AS updated_older_than_7d "
+        "FROM memories"
+    ).fetchone()
+
+    top_runs_rows = db.execute(
+        "SELECT run_id, COUNT(*) AS memory_count "
+        "FROM memories "
+        "WHERE NULLIF(TRIM(COALESCE(run_id, '')), '') IS NOT NULL "
+        "GROUP BY run_id "
+        "ORDER BY memory_count DESC, run_id ASC "
+        "LIMIT 5"
+    ).fetchall()
+
+    run_tracked_active_memories = int((run_stats["active_run_tracked_memories"] or 0))
+
     return {
         "memory_counts": {
             "total": total_memories,
@@ -87,8 +114,22 @@ def get_memory_usefulness_metrics(db: sqlite3.Connection) -> dict:
             "disputed": disputed_memories,
             "reviewed": reviewed_memories,
         },
+        "run_signals": {
+            "distinct_runs": int((run_stats["distinct_runs"] or 0)),
+            "active_run_tracked": run_tracked_active_memories,
+            "top_runs": [
+                {"run_id": r["run_id"], "memory_count": int(r["memory_count"])}
+                for r in top_runs_rows
+            ],
+        },
+        "freshness_signals": {
+            "updated_last_24h": int((freshness["updated_last_24h"] or 0)),
+            "updated_last_7d": int((freshness["updated_last_7d"] or 0)),
+            "updated_older_than_7d": int((freshness["updated_older_than_7d"] or 0)),
+        },
         "coverage_pct": {
             "run_tracked": _pct(run_tracked_memories),
+            "run_tracked_active": _pct(run_tracked_active_memories),
             "idempotent": _pct(idempotent_memories),
             "tagged": _pct(tagged_memories),
             "reviewed": _pct(reviewed_memories),
