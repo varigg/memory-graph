@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from blueprints._params import parse_limit_offset, parse_read_filters, parse_scope_flags
 from db_utils import get_db
@@ -9,6 +9,7 @@ from services.memory_lifecycle_service import (
     set_memory_verification,
     transition_memory_status,
 )
+from services.ops_metrics_service import record_retrieval_observation
 from services.memory_retrieval_service import list_memories as list_memories_service
 from services.memory_retrieval_service import recall_memories, search_memories
 from services.memory_write_service import create_or_get_memory, parse_memory_payload
@@ -311,6 +312,7 @@ def list_memories():
         metadata_value_type=metadata_value_type,
         recency_half_life_hours=recency_half_life_hours,
     )
+    record_retrieval_observation(current_app, "memory_list", len(rows))
     return jsonify(rows)
 
 
@@ -370,6 +372,7 @@ def recall_memory():
         metadata_value=metadata_value,
         metadata_value_type=metadata_value_type,
     )
+    record_retrieval_observation(current_app, "memory_recall", len(results))
     return jsonify(results)
 
 
@@ -429,6 +432,7 @@ def search_memory():
         metadata_value=metadata_value,
         metadata_value_type=metadata_value_type,
     )
+    record_retrieval_observation(current_app, "memory_search", len(results))
     return jsonify(results)
 
 

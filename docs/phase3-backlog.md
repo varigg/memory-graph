@@ -181,6 +181,8 @@ Current status note:
 
 ### P3C-4 Additional operational maintenance follow-ons
 
+- **Status**: Implemented (Sprint C complete; 2026-04-21)
+
 - **Priority**: P3
 - **Depends on**: P3C-2
 - **Scope**:
@@ -225,7 +227,8 @@ but are now present in the codebase:
    - See `docs/plans/sprint-a-memory-signal-adoption.md` for implementation plan
 2. Sprint B: P3C-3 stale private memory cleanup (complete; 2026-04-21)
   - See `docs/plans/sprint-b-stale-private-memory-cleanup.md` for implementation details and validation
-3. Sprint C: P3C-4 additional operational maintenance follow-ons only if real local ops gaps remain
+3. Sprint C: P3C-4 additional operational maintenance follow-ons (in progress; started 2026-04-21)
+  - Completed: integrity checks endpoint, SQLite maintenance helper, deeper ops signals (retrieval/db-lock/dedupe)
 4. Sprint D: harness-bridge primitives if/when goal/autonomy work begins
 
 ## Definition of Done (Phase 3 minimum)

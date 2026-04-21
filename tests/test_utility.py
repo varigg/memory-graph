@@ -291,3 +291,71 @@ def test_ops_metrics_total_latency_gte_avg(client):
     data = client.get("/metrics/ops").get_json()
     health_entry = next(r for r in data["routes"] if r["route"] == "GET /health")
     assert health_entry["total_latency_ms"] >= health_entry["avg_latency_ms"]
+
+
+def test_ops_metrics_includes_deeper_signal_sections(client):
+    data = client.get("/metrics/ops").get_json()
+    assert "signals" in data
+    assert "retrieval_result_signals" in data["signals"]
+    assert "db_lock_signals" in data["signals"]
+    assert "dedupe_signals" in data["signals"]
+
+
+def test_ops_metrics_tracks_retrieval_result_counts(client):
+    client.get("/memory/list?agent_id=agent-alpha")
+    data = client.get("/metrics/ops").get_json()
+    retrieval = data["signals"]["retrieval_result_signals"]["memory_list"]
+    assert retrieval["calls"] >= 1
+    assert retrieval["results_total"] >= 0
+    assert retrieval["avg_results"] >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# GET /maintenance/integrity
+# ---------------------------------------------------------------------------
+
+def test_maintenance_integrity_returns_200(client):
+    resp = client.get("/maintenance/integrity")
+    assert resp.status_code == 200
+
+
+def test_maintenance_integrity_response_shape(client):
+    data = client.get("/maintenance/integrity").get_json()
+    assert "is_clean" in data
+    assert "orphan_counts" in data
+    assert "duplicate_candidates" in data
+    assert "samples" in data
+
+
+def test_maintenance_integrity_rejects_invalid_sample_limit(client):
+    resp = client.get("/maintenance/integrity?sample_limit=0")
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# POST /maintenance/sqlite
+# ---------------------------------------------------------------------------
+
+def test_sqlite_maintenance_dry_run_default(client):
+    resp = client.post("/maintenance/sqlite", json={})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["dry_run"] is True
+    assert "planned_actions" in data
+
+
+def test_sqlite_maintenance_executes_when_dry_run_false(client):
+    resp = client.post("/maintenance/sqlite", json={"dry_run": False})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["dry_run"] is False
+    assert "checkpoint" in data
+    assert "busy" in data["checkpoint"]
+
+
+def test_sqlite_maintenance_rejects_invalid_checkpoint_mode(client):
+    resp = client.post(
+        "/maintenance/sqlite",
+        json={"dry_run": True, "checkpoint_mode": "INVALID"},
+    )
+    assert resp.status_code == 400

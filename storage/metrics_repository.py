@@ -105,3 +105,126 @@ def get_memory_usefulness_metrics(db: sqlite3.Connection) -> dict:
             "verified": _pct(verified_memories),
         },
     }
+
+
+def get_embedding_dedupe_signals(db: sqlite3.Connection) -> dict:
+    row = db.execute(
+        "SELECT "
+        "COUNT(*) AS duplicate_text_groups, "
+        "COALESCE(SUM(text_count - 1), 0) AS duplicate_rows "
+        "FROM ("
+        "  SELECT text, COUNT(*) AS text_count "
+        "  FROM embeddings "
+        "  WHERE text IS NOT NULL "
+        "  GROUP BY text "
+        "  HAVING COUNT(*) > 1"
+        ")"
+    ).fetchone()
+
+    return {
+        "embedding_duplicate_text_groups": int((row["duplicate_text_groups"] or 0)),
+        "embedding_duplicate_rows": int((row["duplicate_rows"] or 0)),
+    }
+
+
+def get_integrity_report(db: sqlite3.Connection, sample_limit: int = 10) -> dict:
+    safe_limit = max(int(sample_limit), 1)
+
+    orphan_conv_count = db.execute(
+        "SELECT COUNT(*) AS orphan_count "
+        "FROM conversations c "
+        "LEFT JOIN embeddings e ON e.id = c.embedding_id "
+        "WHERE c.embedding_id IS NOT NULL AND e.id IS NULL"
+    ).fetchone()["orphan_count"]
+
+    orphan_conv_samples = db.execute(
+        "SELECT c.id AS conversation_id, c.embedding_id "
+        "FROM conversations c "
+        "LEFT JOIN embeddings e ON e.id = c.embedding_id "
+        "WHERE c.embedding_id IS NOT NULL AND e.id IS NULL "
+        "ORDER BY c.id ASC "
+        "LIMIT ?",
+        (safe_limit,),
+    ).fetchall()
+
+    orphan_relation_source_count = db.execute(
+        "SELECT COUNT(*) AS orphan_count "
+        "FROM memory_relations r "
+        "LEFT JOIN memories m ON m.id = r.source_memory_id "
+        "WHERE m.id IS NULL"
+    ).fetchone()["orphan_count"]
+
+    orphan_relation_target_count = db.execute(
+        "SELECT COUNT(*) AS orphan_count "
+        "FROM memory_relations r "
+        "LEFT JOIN memories m ON m.id = r.target_memory_id "
+        "WHERE m.id IS NULL"
+    ).fetchone()["orphan_count"]
+
+    orphan_relation_samples = db.execute(
+        "SELECT r.id AS relation_id, r.source_memory_id, r.target_memory_id, r.relation_type "
+        "FROM memory_relations r "
+        "LEFT JOIN memories s ON s.id = r.source_memory_id "
+        "LEFT JOIN memories t ON t.id = r.target_memory_id "
+        "WHERE s.id IS NULL OR t.id IS NULL "
+        "ORDER BY r.id ASC "
+        "LIMIT ?",
+        (safe_limit,),
+    ).fetchall()
+
+    duplicate_embedding_rows = db.execute(
+        "SELECT text, COUNT(*) AS text_count "
+        "FROM embeddings "
+        "WHERE text IS NOT NULL "
+        "GROUP BY text "
+        "HAVING COUNT(*) > 1 "
+        "ORDER BY text_count DESC, text ASC "
+        "LIMIT ?",
+        (safe_limit,),
+    ).fetchall()
+
+    dedupe_signals = get_embedding_dedupe_signals(db)
+    total_orphans = (
+        int(orphan_conv_count or 0)
+        + int(orphan_relation_source_count or 0)
+        + int(orphan_relation_target_count or 0)
+    )
+
+    return {
+        "is_clean": total_orphans == 0 and dedupe_signals["embedding_duplicate_rows"] == 0,
+        "orphan_counts": {
+            "conversation_embedding_refs": int(orphan_conv_count or 0),
+            "memory_relation_sources": int(orphan_relation_source_count or 0),
+            "memory_relation_targets": int(orphan_relation_target_count or 0),
+            "total": total_orphans,
+        },
+        "duplicate_candidates": {
+            "embedding_text_groups": dedupe_signals["embedding_duplicate_text_groups"],
+            "embedding_rows": dedupe_signals["embedding_duplicate_rows"],
+        },
+        "samples": {
+            "orphan_conversations": [
+                {
+                    "conversation_id": int(row["conversation_id"]),
+                    "embedding_id": int(row["embedding_id"]),
+                }
+                for row in orphan_conv_samples
+            ],
+            "orphan_memory_relations": [
+                {
+                    "relation_id": int(row["relation_id"]),
+                    "source_memory_id": int(row["source_memory_id"]),
+                    "target_memory_id": int(row["target_memory_id"]),
+                    "relation_type": row["relation_type"],
+                }
+                for row in orphan_relation_samples
+            ],
+            "duplicate_embedding_texts": [
+                {
+                    "text": row["text"],
+                    "count": int(row["text_count"]),
+                }
+                for row in duplicate_embedding_rows
+            ],
+        },
+    }

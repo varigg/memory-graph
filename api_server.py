@@ -22,6 +22,7 @@ def create_app(db_path: str = None) -> Flask:
     CORS(app, origins=Config.CORS_ORIGINS)
 
     app.config["OPS_COUNTERS"] = {}
+    app.config["OPS_SIGNALS"] = {}
 
     @app.before_request
     def attach_request_id():

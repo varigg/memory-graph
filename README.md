@@ -254,6 +254,8 @@ Stale private cleanup behavior:
 - `GET /version`
 - `GET /metrics/memory-usefulness`
 - `GET /metrics/ops`
+- `GET /maintenance/integrity`
+- `POST /maintenance/sqlite`
 - `GET /graph`
 
 Request correlation behavior:
@@ -263,8 +265,19 @@ Request correlation behavior:
 - global error responses include `request_id` in the JSON body
 
 `GET /metrics/ops` returns per-route request counts, error counts, average
-latency, and total latency accumulated since the last server start. The
-counters are in-memory only and reset on restart.
+latency, and total latency accumulated since the last server start. It also
+returns deeper signal sections for retrieval-result behavior, database-lock
+events, and dedupe indicators. These counters are in-memory only and reset on
+restart.
+
+Maintenance endpoints:
+
+- `GET /maintenance/integrity`
+  - checks orphan references and duplicate embedding-text candidates
+  - supports `sample_limit` query param for bounded sample output
+- `POST /maintenance/sqlite`
+  - runs SQLite housekeeping commands with `dry_run=true` by default
+  - supports configurable checkpoint mode (`PASSIVE`, `FULL`, `RESTART`, `TRUNCATE`)
 
 Memory usefulness metrics expose a lightweight scorecard for current memory
 usage quality, including:
@@ -288,6 +301,14 @@ Use these write fields consistently so usefulness coverage metrics are meaningfu
 | `tags`                | Retrieval facets for topic/type filtering        | `decision,phase3,sprint-a`                        |
 | `verification_status` | Trust state after review                         | `verified`, `unverified`, `disputed`              |
 | `verification_source` | Provenance of trust update                       | `integration test`, `user review`, `policy check` |
+
+Recommended autonomous-agent workflow:
+
+- keep detailed in-flight context in `/memories/session/` during the task
+- proactively batch-write durable findings and decisions at task end
+- follow batch writes with `POST /memory/verify` for findings already confirmed during the task
+- leave decisions or findings needing external review as `unverified`
+- recover from prior work using `run_id`-scoped reads instead of old scratch notes
 
 See `docs/agent-memory-ops.md` for worked write/read patterns.
 
@@ -345,11 +366,10 @@ Phase 3 starts with multi-agent memory usability for local trusted agents
   - API and schema additions for visibility filtering now active
 - **3B Retrieval Quality + Lifecycle (implemented)**
   - Visibility/owner/status filters, archive/invalidate/merge/supersede lifecycle operations, and memory ranking hints
-- **3C Scale + Ops (implemented initial slice + planned follow-ups)**
-  - Implemented initial slice: request correlation IDs (`X-Request-Id`) and
-    memory usefulness observability
-  - Planned follow-ups: broader request latency/error counters and
-    maintenance/cleanup jobs
+- **3C Scale + Ops (implemented)**
+  - request correlation IDs (`X-Request-Id`) and memory usefulness observability
+  - broader request latency/error counters and deeper ops signals
+  - maintenance endpoints for integrity checks and SQLite housekeeping
 
 See:
 
@@ -372,7 +392,7 @@ uv run pytest -q --tb=no
 
 Current status:
 
-- `373 passed, 14 skipped`
+- `434 passed, 14 skipped`
 
 ## Project Layout
 
