@@ -1,6 +1,7 @@
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
+from db_utils import write_transaction
 from storage.memory_repository import (
     delete_memories_by_ids,
     list_stale_private_memories,
@@ -27,20 +28,21 @@ def set_memory_verification(
         return None, "invalid_status"
 
     if verification_status == "verified":
-        db.execute(
-            "UPDATE memories "
-            "SET verification_status = ?, verification_source = ?, verified_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP "
-            "WHERE id = ?",
-            (verification_status, verification_source, memory_id),
-        )
+        with write_transaction(db):
+            db.execute(
+                "UPDATE memories "
+                "SET verification_status = ?, verification_source = ?, verified_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = ?",
+                (verification_status, verification_source, memory_id),
+            )
     else:
-        db.execute(
-            "UPDATE memories "
-            "SET verification_status = ?, verification_source = ?, verified_at = NULL, updated_at = CURRENT_TIMESTAMP "
-            "WHERE id = ?",
-            (verification_status, verification_source, memory_id),
-        )
-    db.commit()
+        with write_transaction(db):
+            db.execute(
+                "UPDATE memories "
+                "SET verification_status = ?, verification_source = ?, verified_at = NULL, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = ?",
+                (verification_status, verification_source, memory_id),
+            )
     return {
         "id": memory_id,
         "verification_status": verification_status,
@@ -62,13 +64,13 @@ def promote_memory_to_shared(
     if row[1] != requester_agent_id:
         return None, "forbidden"
 
-    db.execute(
-        "UPDATE memories "
-        "SET visibility = 'shared', updated_at = CURRENT_TIMESTAMP "
-        "WHERE id = ?",
-        (memory_id,),
-    )
-    db.commit()
+    with write_transaction(db):
+        db.execute(
+            "UPDATE memories "
+            "SET visibility = 'shared', updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?",
+            (memory_id,),
+        )
     return {"id": row[0], "visibility": "shared"}, None
 
 
@@ -99,13 +101,13 @@ def transition_memory_status(
     if current_status == "archived" and target_status == "archived":
         return {"id": row[0], "status": current_status}, None
 
-    db.execute(
-        "UPDATE memories "
-        "SET status = ?, updated_at = CURRENT_TIMESTAMP, status_updated_at = CURRENT_TIMESTAMP "
-        "WHERE id = ?",
-        (target_status, memory_id),
-    )
-    db.commit()
+    with write_transaction(db):
+        db.execute(
+            "UPDATE memories "
+            "SET status = ?, updated_at = CURRENT_TIMESTAMP, status_updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?",
+            (target_status, memory_id),
+        )
     return {"id": row[0], "status": target_status}, None
 
 
@@ -164,25 +166,25 @@ def relate_memory_lifecycle(
 
     source_status_value = "archived" if relation_type == "merged_into" else "invalidated"
 
-    db.execute(
-        "INSERT INTO memory_relations ("
-        "source_memory_id, target_memory_id, relation_type, actor_agent_id"
-        ") VALUES (?, ?, ?, ?)",
-        (memory_id, target_memory_id, relation_type, requester_agent_id),
-    )
-    db.execute(
-        "UPDATE memories "
-        "SET status = ?, updated_at = CURRENT_TIMESTAMP, status_updated_at = CURRENT_TIMESTAMP "
-        "WHERE id = ?",
-        (source_status_value, memory_id),
-    )
-    db.execute(
-        "UPDATE memories "
-        "SET updated_at = CURRENT_TIMESTAMP "
-        "WHERE id = ?",
-        (target_memory_id,),
-    )
-    db.commit()
+    with write_transaction(db):
+        db.execute(
+            "INSERT INTO memory_relations ("
+            "source_memory_id, target_memory_id, relation_type, actor_agent_id"
+            ") VALUES (?, ?, ?, ?)",
+            (memory_id, target_memory_id, relation_type, requester_agent_id),
+        )
+        db.execute(
+            "UPDATE memories "
+            "SET status = ?, updated_at = CURRENT_TIMESTAMP, status_updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?",
+            (source_status_value, memory_id),
+        )
+        db.execute(
+            "UPDATE memories "
+            "SET updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?",
+            (target_memory_id,),
+        )
     return {
         "source_memory_id": memory_id,
         "target_memory_id": target_memory_id,
@@ -219,7 +221,8 @@ def cleanup_stale_private_memories(
 
     deleted_count = 0
     if not dry_run:
-        deleted_count = delete_memories_by_ids(db, stale_ids)
+        with write_transaction(db):
+            deleted_count = delete_memories_by_ids(db, stale_ids)
 
     return {
         "dry_run": dry_run,

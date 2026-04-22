@@ -1,7 +1,7 @@
 from flask import Blueprint, current_app, jsonify, request
 
 from blueprints._params import parse_limit_offset, parse_read_filters, parse_scope_flags
-from db_utils import get_db
+from db_utils import get_db, write_transaction
 from services.memory_lifecycle_service import (
     cleanup_stale_private_memories,
     promote_memory_to_shared,
@@ -17,6 +17,9 @@ from services.memory_request_models import (
 )
 from services.memory_retrieval_service import list_memories as list_memories_service
 from services.memory_retrieval_service import recall_memories, search_memories
+from services.memory_write_service import (
+    create_memory_batch as service_create_memory_batch,
+)
 from services.memory_write_service import create_or_get_memory, parse_memory_payload
 from services.ops_metrics_service import record_retrieval_observation
 from storage.entity_repository import insert_entity, search_entities
@@ -33,7 +36,8 @@ def create_memory():
         return jsonify({"error": str(exc)}), 400
 
     db = get_db()
-    result = create_or_get_memory(db, payload)
+    with write_transaction(db):
+        result = create_or_get_memory(db, payload)
     if result["created"]:
         return jsonify({"id": result["id"]}), 201
     return jsonify({"id": result["id"], "idempotent_replay": True}), 200
@@ -49,16 +53,16 @@ def create_memory_batch():
     if not isinstance(memories, list) or not memories:
         return jsonify({"error": "memories must be a non-empty list"}), 400
 
-    db = get_db()
-    created = []
+    payloads = []
     for index, item in enumerate(memories):
         try:
-            payload = parse_memory_payload(item)
+            payloads.append(parse_memory_payload(item))
         except ValueError as exc:
             return jsonify({"error": f"invalid item at index {index}", "detail": str(exc)}), 400
-        created.append(create_or_get_memory(db, payload))
 
-    return jsonify({"results": created}), 201
+    db = get_db()
+    results = service_create_memory_batch(db, payloads)
+    return jsonify({"results": results}), 201
 
 
 @bp.route("/memory/<int:memory_id>/promote", methods=["POST"])

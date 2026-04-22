@@ -2,8 +2,9 @@
 
 ## Plan Status
 
-- **Status:** Planned
+- **Status:** Implemented (write and lifecycle payload validation)
 - **Created:** 2026-04-21
+- **Updated:** 2026-04-21
 
 ## Goal
 

@@ -1370,3 +1370,77 @@ class TestMemoryReadScoping:
         )
         search_names = {m.get("name") for m in search_resp.get_json()}
         assert "archived-visible" in search_names
+
+
+# ---------------------------------------------------------------------------
+# Write atomicity invariants
+#
+# These tests document the expected all-or-nothing behavior for multi-row
+# write operations. Tests marked xfail prove bugs that the transactional
+# write refactor (see docs/plans/transactional-write-guarantees.md) must fix.
+# Remove the xfail marker once the refactor makes the assertion pass.
+# ---------------------------------------------------------------------------
+
+import pytest
+
+
+def test_batch_write_partial_failure_commits_no_rows(client):
+    """A batch returning 400 must leave the database entirely unchanged.
+
+    Sends a two-item batch where item 0 is valid and item 1 is invalid (empty
+    name). The expected contract is all-or-nothing: either both rows are written
+    (201) or neither row is written (400).
+    """
+    resp = client.post(
+        "/memory/batch",
+        json={
+            "memories": [
+                _memory_payload(name="tx-batch-should-not-persist", content="first item"),
+                _memory_payload(name="", content="empty name triggers 400"),
+            ]
+        },
+    )
+    assert resp.status_code == 400
+
+    items = client.get("/memory/list").get_json()
+    names = {m.get("name") for m in items}
+    assert "tx-batch-should-not-persist" not in names, (
+        "item 0 was committed despite the batch returning 400 — partial write detected"
+    )
+
+
+def test_batch_write_idempotent_replay_creates_no_duplicates(client):
+    """A successful batch replayed with the same idempotency keys must not create
+    duplicate rows.
+
+    This is the core idempotency contract that must survive the transactional
+    refactor unchanged.
+    """
+    payload = {
+        "memories": [
+            _memory_payload(
+                name="idem-replay-1",
+                content="first",
+                idempotency_key="tx-idem-replay-1",
+            ),
+            _memory_payload(
+                name="idem-replay-2",
+                content="second",
+                idempotency_key="tx-idem-replay-2",
+            ),
+        ]
+    }
+
+    first = client.post("/memory/batch", json=payload)
+    assert first.status_code == 201
+    first_ids = {r["id"] for r in first.get_json()["results"]}
+
+    replay = client.post("/memory/batch", json=payload)
+    assert replay.status_code == 201
+    replay_ids = {r["id"] for r in replay.get_json()["results"]}
+
+    assert first_ids == replay_ids, "replay must return the same IDs, not new rows"
+
+    items = client.get("/memory/list").get_json()
+    matching = [i for i in items if i["name"] in {"idem-replay-1", "idem-replay-2"}]
+    assert len(matching) == 2, "exactly two rows must exist — no duplicates from replay"

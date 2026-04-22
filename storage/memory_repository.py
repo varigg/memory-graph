@@ -391,7 +391,6 @@ def insert_memory(
             metadata_json,
         ),
     )
-    db.commit()
     return cur.lastrowid
 
 
@@ -446,5 +445,4 @@ def delete_memories_by_ids(db: sqlite3.Connection, memory_ids: list[int]) -> int
         f"DELETE FROM memories WHERE id IN ({placeholders})",
         memory_ids,
     )
-    db.commit()
     return int(cur.rowcount or 0)

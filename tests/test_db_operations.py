@@ -761,3 +761,41 @@ class TestMemoryLifecycleRelations:
         )
         assert related is None
         assert err == "forbidden"
+
+    def test_relate_memory_lifecycle_relation_and_status_are_consistent(self, db):
+        """The relation row and the source status change written by
+        relate_memory_lifecycle must be visible together after the call returns.
+
+        This documents the internal consistency guarantee that the transactional
+        write refactor must preserve: the INSERT into memory_relations and the
+        UPDATE on memories.status are part of the same logical write and must
+        never be observed in a split state.
+        """
+        source_id = insert_memory(
+            db, "src-consistency", "note", "content", "",
+            visibility="private", owner_agent_id="agent-alpha",
+        )
+        target_id = insert_memory(
+            db, "tgt-consistency", "note", "content", "",
+            visibility="shared", owner_agent_id="agent-beta",
+        )
+
+        result, err = relate_memory_lifecycle(
+            db, source_id, target_id, "agent-alpha", "merged_into",
+        )
+
+        assert err is None
+
+        relation = db.execute(
+            "SELECT relation_type FROM memory_relations "
+            "WHERE source_memory_id = ? AND target_memory_id = ?",
+            (source_id, target_id),
+        ).fetchone()
+        source_status = db.execute(
+            "SELECT status FROM memories WHERE id = ?", (source_id,)
+        ).fetchone()[0]
+
+        # Both writes must be observable in the same read — never one without the other.
+        assert relation is not None, "relation row must be present"
+        assert relation[0] == "merged_into"
+        assert source_status == "archived", "source status must reflect the merge"

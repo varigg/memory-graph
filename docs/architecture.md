@@ -39,6 +39,11 @@ The important architectural conclusion is that these use cases still share the
 same storage, indexing, and lifecycle primitives. The divergence is primarily in
 **retrieval policy**, not in persistence model or deployment topology.
 
+For harness v2, this repository should move as quickly as possible toward the
+durable substrate that the harness depends on, without prematurely absorbing the
+goal engine, planner, world model, experiment system, or other cognition-layer
+subsystems described in `harness.md`.
+
 ## Architectural Position
 
 The service should remain **one deployable local service with one database**,
@@ -54,6 +59,13 @@ The current architectural direction is:
 
 This keeps the core durable and simple while preventing client behavior from
 implicitly defining the system contract.
+
+The fastest non-shortcut path to harness v2 is therefore:
+
+- finish the substrate invariants the harness will rely on
+- make retrieval behavior explicit for autonomous versus general clients
+- add only the smallest harness-facing primitives that need to live beside the
+  memory substrate
 
 ## Core Building Blocks
 
@@ -120,6 +132,10 @@ Memory rows carry operational semantics beyond simple CRUD:
 
 This is what makes the service useful for long-running agent workflows rather
 than only as a generic note store.
+
+Near-term harness v2 work should prefer extending this layer with auditable
+bridge records and stable write semantics before adding broader runtime control
+surfaces.
 
 ## Intended Retrieval Modes
 
@@ -241,6 +257,16 @@ That boundary matters because it prevents premature growth of this service into 
 planner, scheduler, world model, or autonomy engine before the memory substrate
 is fully stable.
 
+The practical implication is that harness v2 should first consume Memory Graph as
+an audited storage and retrieval backend. The first integration steps should be
+minimal bridge primitives such as goal/action-log/autonomy-checkpoint records or
+other narrow surfaces that are clearly shared substrate concerns. Goal ranking,
+plan execution, learning loops, experiments, and broader runtime policy should
+remain in the harness unless repeated usage proves they belong here.
+
+The concrete implementation plan for that first bridge slice lives in
+`docs/plans/harness-v2-bridge-primitives.md`.
+
 ## Documentation Strategy
 
 The recommended documentation model is a **mix**, not a single monolithic file
@@ -264,9 +290,9 @@ This avoids two failure modes:
    parameter combinations.
 2. Tighten transaction boundaries for multi-step write flows that still commit
    across repository and service calls.
-3. Add stronger isolation-friendly seams, including dependency-injection-ready
-   service boundaries and focused unit tests around service modules.
-4. Replace ad-hoc dict payload parsing with explicit schema models once the
-   service signatures are stable enough to justify that dependency.
-5. Keep the service as a substrate until there is a deliberate decision to grow
-   harness-specific runtime features here.
+3. Add the minimum harness-facing bridge primitives needed for v2 integration
+   only after retrieval and write invariants are reliable.
+4. Add stronger isolation-friendly seams and focused unit tests around service
+   modules where they directly improve harness integration safety.
+5. Keep broader harness runtime concerns out of this service unless there is a
+   deliberate decision to expand beyond the substrate role.

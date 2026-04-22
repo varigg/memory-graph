@@ -1,8 +1,10 @@
 import json
+import sqlite3
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, StrictStr, ValidationError
 
+from db_utils import write_transaction
 from storage.memory_repository import get_memory_by_idempotency_key, insert_memory
 
 
@@ -119,3 +121,17 @@ def create_or_get_memory(db, payload: dict) -> dict:
         metadata_json=payload["metadata_json"],
     )
     return {"id": rowid, "created": True}
+
+
+def create_memory_batch(db: sqlite3.Connection, payloads: list[dict]) -> list[dict]:
+    """Write all items in a single atomic transaction.
+
+    The idempotency check for each item happens inside the transaction so that
+    a replay of the same batch returns the same IDs without creating duplicates,
+    and any failure rolls back every insert that preceded it.
+    """
+    results = []
+    with write_transaction(db):
+        for payload in payloads:
+            results.append(create_or_get_memory(db, payload))
+    return results
