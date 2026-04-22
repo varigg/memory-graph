@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from typing import Optional
 
 ALLOWED_GOAL_STATUSES = {"active", "blocked", "completed", "abandoned"}
 
@@ -89,7 +90,7 @@ def insert_goal(
 def append_goal_status_history(
     db: sqlite3.Connection,
     goal_id: int,
-    old_status: str,
+    old_status: Optional[str],
     new_status: str,
     changed_by_agent_id: str,
     reason: str = None,

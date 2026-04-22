@@ -38,13 +38,17 @@ class TestInitCreatesAllTables:
         "memories",
         "entities",
         "embeddings",
+        "goals",
+        "goal_status_history",
+        "action_logs",
+        "autonomy_checkpoints",
         "importance_keywords",
         "fts_conversations",
         "fts_memories",
         "kv_store",
     }
 
-    def test_all_eight_tables_exist_after_init(self, tmp_path):
+    def test_all_expected_tables_exist_after_init(self, tmp_path):
         import db_schema  # noqa: PLC0415
         db_path = str(tmp_path / "test.db")
         db_schema.init(db_path)
@@ -325,6 +329,78 @@ class TestEmbeddingsColumns:
         conn.close()
         assert self.EXPECTED.issubset(cols)
 
+    def test_embeddings_has_vector_column(self, tmp_path):
+        import db_schema  # noqa: PLC0415
+        db_path = str(tmp_path / "test.db")
+        db_schema.init(db_path)
+        conn = sqlite3.connect(db_path)
+        cols = _get_column_names(conn, "embeddings")
+        conn.close()
+        assert "vector" in cols
+
+    def test_embeddings_has_model_version_column(self, tmp_path):
+        import db_schema  # noqa: PLC0415
+        db_path = str(tmp_path / "test.db")
+        db_schema.init(db_path)
+        conn = sqlite3.connect(db_path)
+        cols = _get_column_names(conn, "embeddings")
+        conn.close()
+        assert "model_version" in cols
+
+
+# ---------------------------------------------------------------------------
+# goals columns
+# ---------------------------------------------------------------------------
+
+class TestGoalsColumns:
+    EXPECTED = {
+        "title",
+        "status",
+        "utility",
+        "deadline",
+        "constraints_json",
+        "success_criteria_json",
+        "risk_tier",
+        "autonomy_level_requested",
+        "autonomy_level_effective",
+        "owner_agent_id",
+        "run_id",
+        "idempotency_key",
+        "created_at",
+        "updated_at",
+    }
+
+    def test_goals_has_all_required_columns(self, tmp_path):
+        import db_schema  # noqa: PLC0415
+
+        db_path = str(tmp_path / "test.db")
+        db_schema.init(db_path)
+        conn = sqlite3.connect(db_path)
+        cols = _get_column_names(conn, "goals")
+        conn.close()
+        assert self.EXPECTED.issubset(cols)
+
+
+class TestGoalStatusHistoryColumns:
+    EXPECTED = {
+        "goal_id",
+        "old_status",
+        "new_status",
+        "changed_by_agent_id",
+        "reason",
+        "created_at",
+    }
+
+    def test_goal_status_history_has_all_required_columns(self, tmp_path):
+        import db_schema  # noqa: PLC0415
+
+        db_path = str(tmp_path / "test.db")
+        db_schema.init(db_path)
+        conn = sqlite3.connect(db_path)
+        cols = _get_column_names(conn, "goal_status_history")
+        conn.close()
+        assert self.EXPECTED.issubset(cols)
+
 
 # ---------------------------------------------------------------------------
 # action_logs columns
@@ -386,24 +462,6 @@ class TestAutonomyCheckpointColumns:
         cols = _get_column_names(conn, "autonomy_checkpoints")
         conn.close()
         assert self.EXPECTED.issubset(cols)
-
-    def test_embeddings_has_vector_column(self, tmp_path):
-        import db_schema  # noqa: PLC0415
-        db_path = str(tmp_path / "test.db")
-        db_schema.init(db_path)
-        conn = sqlite3.connect(db_path)
-        cols = _get_column_names(conn, "embeddings")
-        conn.close()
-        assert "vector" in cols
-
-    def test_embeddings_has_model_version_column(self, tmp_path):
-        import db_schema  # noqa: PLC0415
-        db_path = str(tmp_path / "test.db")
-        db_schema.init(db_path)
-        conn = sqlite3.connect(db_path)
-        cols = _get_column_names(conn, "embeddings")
-        conn.close()
-        assert "model_version" in cols
 
 
 # ---------------------------------------------------------------------------

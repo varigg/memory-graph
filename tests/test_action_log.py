@@ -77,6 +77,20 @@ def test_create_action_log_rejects_parent_from_different_goal(client):
     assert resp.get_json()["error"] == "parent action must belong to the same goal"
 
 
+def test_create_action_log_rejects_rollback_from_different_goal(client):
+    goal_a = client.post("/goal", json=_goal_payload(title="A")).get_json()["id"]
+    goal_b = client.post("/goal", json=_goal_payload(title="B")).get_json()["id"]
+
+    rollback_id = client.post("/action-log", json=_action_payload(goal_id=goal_a)).get_json()["id"]
+    resp = client.post(
+        "/action-log",
+        json=_action_payload(goal_id=goal_b, rollback_action_id=rollback_id),
+    )
+
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "rollback action must belong to the same goal and owner"
+
+
 def test_list_action_logs_filters_by_goal_and_status(client):
     goal_id = client.post("/goal", json=_goal_payload()).get_json()["id"]
     other_goal_id = client.post("/goal", json=_goal_payload(title="other")).get_json()["id"]
@@ -164,3 +178,26 @@ def test_complete_action_log_rejects_terminal_status_change(client):
     assert first.status_code == 200
     assert second.status_code == 409
     assert second.get_json()["error"] == "invalid transition"
+
+
+def test_complete_action_log_rejects_rollback_from_different_goal(client):
+    goal_a = client.post("/goal", json=_goal_payload(title="A")).get_json()["id"]
+    goal_b = client.post("/goal", json=_goal_payload(title="B")).get_json()["id"]
+
+    action_id = client.post(
+        "/action-log",
+        json=_action_payload(goal_id=goal_a, status="running"),
+    ).get_json()["id"]
+    rollback_id = client.post("/action-log", json=_action_payload(goal_id=goal_b)).get_json()["id"]
+
+    resp = client.post(
+        f"/action-log/{action_id}/complete",
+        json={
+            "owner_agent_id": "agent-alpha",
+            "status": "failed",
+            "rollback_action_id": rollback_id,
+        },
+    )
+
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "rollback action must belong to the same goal and owner"

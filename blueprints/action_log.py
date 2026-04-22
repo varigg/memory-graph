@@ -35,6 +35,8 @@ def create_action_log():
         return jsonify({"error": "parent action must belong to the same goal"}), 409
     if err == "rollback_not_found":
         return jsonify({"error": "rollback action not found"}), 404
+    if err == "rollback_conflict":
+        return jsonify({"error": "rollback action must belong to the same goal and owner"}), 409
     if err == "invalid_mode":
         return jsonify({"error": "mode must be one of: plan, dry_run, live, rollback"}), 400
     if err == "invalid_status":
@@ -121,5 +123,7 @@ def complete_action_log(action_id):
         return jsonify({"error": "invalid transition"}), 409
     if err == "rollback_not_found":
         return jsonify({"error": "rollback action not found"}), 404
+    if err == "rollback_conflict":
+        return jsonify({"error": "rollback action must belong to the same goal and owner"}), 409
 
     return jsonify(result), 200

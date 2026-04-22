@@ -1,4 +1,4 @@
-"""Integration checks for the harness bridge primitives (M1-M3) with M4 polish assertions."""
+"""Integration checks for the harness bridge primitives (M1-M4) with M4 polish assertions."""
 
 
 def test_harness_bridge_end_to_end_flow(client):

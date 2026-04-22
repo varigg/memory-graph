@@ -252,7 +252,7 @@ Stale private cleanup behavior:
   deterministic deletion summary
 - optional `owner_agent_id` narrows cleanup to one owner's private memories
 
-### Goals + Action Logs + Autonomy Checks (Harness Bridge Primitives M1-M3)
+### Goals + Action Logs + Autonomy Checks (Harness Bridge Primitives M1-M4)
 
 - `POST /goal`
   - Body: `title` (required), `owner_agent_id` (required)

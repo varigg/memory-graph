@@ -41,6 +41,11 @@ def create_or_get_action_log(db: sqlite3.Connection, payload: dict) -> dict:
         rollback = get_action_log_by_id(db, payload["rollback_action_id"])
         if rollback is None:
             return None, "rollback_not_found"
+        if (
+            rollback["goal_id"] != payload["goal_id"]
+            or rollback["owner_agent_id"] != owner_agent_id
+        ):
+            return None, "rollback_conflict"
 
     if idempotency_key:
         existing = get_action_log_by_idempotency_key(db, owner_agent_id, idempotency_key)
@@ -112,6 +117,11 @@ def complete_action_log_entry(
         rollback = get_action_log_by_id(db, rollback_action_id)
         if rollback is None:
             return None, "rollback_not_found"
+        if (
+            rollback["goal_id"] != existing["goal_id"]
+            or rollback["owner_agent_id"] != existing["owner_agent_id"]
+        ):
+            return None, "rollback_conflict"
 
     with write_transaction(db):
         complete_action_log(
