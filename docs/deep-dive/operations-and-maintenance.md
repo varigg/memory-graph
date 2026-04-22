@@ -13,8 +13,9 @@ signals derived from memory rows.
 Primary groups:
 
 - `memory_counts`
-- `adoption_signals` (`run_id`, `idempotency_key`, `tags` usage)
-- `trust_signals` (`verified`, `disputed`, `reviewed`)
+- `adoption_signals` (`run_tracked`, `idempotent`, `tagged`; derived from
+  `run_id`, `idempotency_key`, and `tags`)
+- `trust_signals` (response keys: `verified`, `disputed`, `reviewed`)
 - `run_signals` (distinct runs, top run ids)
 - `freshness_signals`
 - `coverage_pct`

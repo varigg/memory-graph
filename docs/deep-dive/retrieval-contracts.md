@@ -10,7 +10,13 @@ The profile and filter contract applies to:
 - `GET /memory/recall`
 - `GET /memory/search`
 
-All three return a bare JSON array of memory objects.
+All three return a bare JSON array, but the item shape differs by endpoint:
+
+- `GET /memory/list` returns full memory objects.
+- `GET /memory/recall` returns recall/FTS result objects keyed by
+  `memory_id` with a subset of memory fields.
+- `GET /memory/search` returns search/FTS result objects keyed by
+  `memory_id` with a subset of memory fields.
 
 ## Retrieval Profiles
 
