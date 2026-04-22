@@ -5,6 +5,7 @@ exists in this form, and which boundaries are now implemented versus still
 evolving.
 
 Use this file for the current-state architecture narrative.
+Use `docs/deep-dive/` for subsystem-level implementation state and invariants.
 Use the ADRs in `docs/adr/` for durable decision records.
 Use `docs/roadmap.md` for implementation status.
 
@@ -273,10 +274,15 @@ The recommended documentation model is a **mix**, not a single monolithic file
 and not a retroactive ADR for every historical detail.
 
 - `docs/architecture.md` explains the current system shape and design intent.
+- `docs/deep-dive/` captures subsystem-level implemented behavior and
+  invariants that should stay useful after plans are complete.
 - `docs/adr/` captures durable architecture decisions that should remain stable
   over time.
 - `docs/conversation-outcomes.md` remains the discussion outcome ledger.
 - `docs/roadmap.md` remains the status tracker.
+- `docs/plans/` is for active implementation planning only; once a plan's
+  durable implementation details are promoted into `docs/deep-dive/` or other
+  canonical docs, the completed plan should be removed.
 
 This avoids two failure modes:
 
@@ -287,9 +293,9 @@ This avoids two failure modes:
 ## Near-Term Architectural Priorities
 
 1. Keep retrieval profile behavior stable and explicit across memory read
-  endpoints (`profile=general|autonomous`) as additional read surfaces evolve.
+   endpoints (`profile=general|autonomous`) as additional read surfaces evolve.
 2. Keep service-owned transaction boundaries consistent for multi-step write
-  flows and avoid reintroducing repository-level implicit commits.
+   flows and avoid reintroducing repository-level implicit commits.
 3. Add the minimum harness-facing bridge primitives needed for v2 integration
    only after retrieval and write invariants are reliable.
 4. Add stronger isolation-friendly seams and focused unit tests around service

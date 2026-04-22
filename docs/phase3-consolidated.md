@@ -330,14 +330,10 @@ feature-specific planning rather than a reopened Phase 3 scope.
 
 This document consolidates the historical and planning intent from:
 
-- `docs/phase3-overview.md`
-- `docs/phase3a.md`
-- `docs/phase3b.md`
-- `docs/phase3c.md`
-- `docs/phase3-backlog.md`
-- `docs/plans/sprint-a-memory-signal-adoption.md`
-- `docs/plans/sprint-b-stale-private-memory-cleanup.md`
-- `docs/plans/sprint-c-operational-maintenance-follow-ons.md`
+- implementation and review work now reflected in `README.md`
+- subsystem invariants now captured in `docs/deep-dive/`
+- canonical feature status in `docs/roadmap.md`
 
-Those files may still be useful as detailed execution records, but this file is
-the single consolidated retrospective summary for Phase 3.
+Those files are the canonical references for current implementation details and
+ongoing prioritization, while this file remains the consolidated retrospective
+summary for Phase 3.

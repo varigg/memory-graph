@@ -10,24 +10,18 @@ Use these documents as the canonical reading path for the project:
 
 - `README.md` — current API surface, runtime workflow, and project status
 - `docs/architecture.md` — current architectural shape, system boundaries, and why the service remains one substrate
+- `docs/deep-dive/README.md` — targeted deep-dive docs for implemented subsystem behavior
 - `docs/adr/README.md` — architecture decision record index
 - `docs/roadmap.md` — canonical living feature tracker across implemented, planned, and deferred work
 - `docs/conversation-outcomes.md` — durable summary of design-discussion outcomes and where they landed
 - `docs/phase1-2-consolidated.md` — consolidated review and implementation summary for the original backend foundation and hardening work
-- `docs/phase3-backlog.md` — the active detailed backlog for remaining Phase 3 and follow-on operational work
+- `docs/phase3-consolidated.md` — consolidated retrospective summary of Phase 3 implementation and rationale
+- `docs/plans/README.md` — active implementation plans and plan lifecycle rules
 - `docs/agent-memory-ops.md` — restart-safe autonomous-agent operating conventions for this service
 - `harness.md` — target autonomous-agent harness vision that this backend is intended to support over time
 - `.github/copilot-instructions.md` — Copilot-specific session continuity and shared-memory usage hints for this repo
 
-Historical/reference docs retained for implementation context:
-
-- `docs/phase3-overview.md` — original deployment-fit framing for Phase 3
-- `docs/phase3a.md` — implemented shared/private memory scope contract
-- `docs/phase3a-pr-chunks.md` — historical PR decomposition for the Phase 3A rollout
-- `docs/phase3b.md` — implemented retrieval quality and lifecycle scope
-- `docs/phase3c.md` — remaining Phase 3C ops themes summarized at a high level
-
-If you want the shortest end-to-end overview, read this file first, then `docs/architecture.md`, then `docs/adr/README.md`, then `docs/roadmap.md`, then `docs/conversation-outcomes.md`, then `docs/phase1-2-consolidated.md`, then `docs/phase3-backlog.md`, then `docs/agent-memory-ops.md`, and finally `harness.md`.
+If you want the shortest end-to-end overview, read this file first, then `docs/architecture.md`, then `docs/deep-dive/README.md`, then `docs/adr/README.md`, then `docs/roadmap.md`, then `docs/conversation-outcomes.md`, then `docs/phase1-2-consolidated.md`, then `docs/phase3-consolidated.md`, then `docs/agent-memory-ops.md`, and finally `harness.md`.
 
 ## Quick Start
 
@@ -400,12 +394,10 @@ Phase 3 starts with multi-agent memory usability for local trusted agents
 
 See:
 
-- `docs/phase3a.md`
-- `docs/phase3a-pr-chunks.md`
-- `docs/phase3b.md`
-- `docs/phase3c.md`
-- `docs/phase3-overview.md`
-- `docs/phase3-backlog.md`
+- `docs/phase3-consolidated.md`
+- `docs/deep-dive/lifecycle-and-trust.md`
+- `docs/deep-dive/retrieval-contracts.md`
+- `docs/deep-dive/operations-and-maintenance.md`
 - `docs/agent-memory-ops.md` (autonomous-agent operational usage and restart guide)
 - `harness.md` (target harness design this service is expected to support)
 
@@ -445,15 +437,12 @@ memory-graph/
 │   ├── agent-memory-ops.md
 │   ├── architecture.md
 │   ├── conversation-outcomes.md
+│   ├── deep-dive/
 │   ├── phase1-2-consolidated.md
+│   ├── phase3-consolidated.md
 │   ├── roadmap.md
-│   ├── phase3a.md
-│   ├── phase3a-pr-chunks.md
-│   ├── phase3b.md
-│   ├── phase3c.md
 │   ├── refactor-service-layer.md
-│   ├── phase3-overview.md
-│   └── phase3-backlog.md
+│   └── plans/
 ├── services/
 │   ├── hybrid_search_service.py
 │   ├── memory_lifecycle_service.py
