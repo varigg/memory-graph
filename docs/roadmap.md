@@ -83,9 +83,9 @@ on `/memory/list`, `/memory/recall`, and `/memory/search`; autonomous defaults a
 omitted (`status=active`, `min_confidence=0.7`, `recency_half_life_hours=168`). Documented in
 `docs/deep-dive/retrieval-contracts.md`.
 
-Bridge primitives (M1-M3) are **in progress** (2026-04-22). Goals, action logs, and autonomy
-checkpoints are implemented in the `plan/harness-bridge-primitives-detail` worktree and pending
-merge. M4 polish (response shape fixes, deep-dive docs, integration hardening) remains.
+Bridge primitives (M1-M4) are **implemented** (2026-04-22). Goals, action logs, and autonomy
+checkpoints are implemented and merged. Durable behavior documented in
+`docs/deep-dive/bridge-primitives.md`.
 
 Recommended next steps in priority order:
 

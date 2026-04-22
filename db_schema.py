@@ -84,6 +84,76 @@ CREATE TABLE IF NOT EXISTS memory_relations (
     FOREIGN KEY(target_memory_id) REFERENCES memories(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS goals (
+    id INTEGER PRIMARY KEY,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'blocked', 'completed', 'abandoned')),
+    utility REAL NOT NULL DEFAULT 0,
+    deadline TEXT,
+    constraints_json TEXT NOT NULL DEFAULT '{}',
+    success_criteria_json TEXT NOT NULL DEFAULT '{}',
+    risk_tier TEXT NOT NULL DEFAULT 'low' CHECK (risk_tier IN ('low', 'medium', 'high', 'critical')),
+    autonomy_level_requested INTEGER NOT NULL DEFAULT 0,
+    autonomy_level_effective INTEGER NOT NULL DEFAULT 0,
+    owner_agent_id TEXT NOT NULL,
+    run_id TEXT,
+    idempotency_key TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS goal_status_history (
+    id INTEGER PRIMARY KEY,
+    goal_id INTEGER NOT NULL,
+    old_status TEXT,
+    new_status TEXT NOT NULL CHECK (new_status IN ('active', 'blocked', 'completed', 'abandoned')),
+    changed_by_agent_id TEXT NOT NULL,
+    reason TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS action_logs (
+    id INTEGER PRIMARY KEY,
+    goal_id INTEGER NOT NULL,
+    parent_action_id INTEGER,
+    action_type TEXT NOT NULL,
+    tool_name TEXT,
+    mode TEXT NOT NULL CHECK (mode IN ('plan', 'dry_run', 'live', 'rollback')),
+    status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'rolled_back')),
+    input_summary TEXT,
+    expected_result TEXT,
+    observed_result TEXT,
+    rollback_action_id INTEGER,
+    owner_agent_id TEXT NOT NULL,
+    run_id TEXT,
+    idempotency_key TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME,
+    FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE,
+    FOREIGN KEY(parent_action_id) REFERENCES action_logs(id) ON DELETE SET NULL,
+    FOREIGN KEY(rollback_action_id) REFERENCES action_logs(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS autonomy_checkpoints (
+    id INTEGER PRIMARY KEY,
+    goal_id INTEGER,
+    action_id INTEGER,
+    requested_level INTEGER NOT NULL,
+    approved_level INTEGER NOT NULL,
+    verdict TEXT NOT NULL CHECK (verdict IN ('approved', 'denied', 'sandbox_only')),
+    rationale TEXT,
+    stop_conditions_json TEXT NOT NULL DEFAULT '{}',
+    rollback_required INTEGER NOT NULL DEFAULT 0,
+    reviewer_type TEXT NOT NULL DEFAULT 'system' CHECK (reviewer_type IN ('policy', 'human', 'system')),
+    owner_agent_id TEXT NOT NULL,
+    run_id TEXT,
+    idempotency_key TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE SET NULL,
+    FOREIGN KEY(action_id) REFERENCES action_logs(id) ON DELETE SET NULL
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS fts_conversations
     USING fts5(content, role, channel, conversation_id UNINDEXED);
 
@@ -329,6 +399,69 @@ def init(db_path: str) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_memory_relations_target "
         "ON memory_relations(target_memory_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_goals_owner_status_updated "
+        "ON goals(owner_agent_id, status, updated_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_goals_run_created "
+        "ON goals(run_id, created_at DESC)"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_goals_owner_idempotency "
+        "ON goals(owner_agent_id, idempotency_key) "
+        "WHERE idempotency_key IS NOT NULL"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_goal_status_history_goal_created "
+        "ON goal_status_history(goal_id, created_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_action_logs_goal_created "
+        "ON action_logs(goal_id, created_at ASC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_action_logs_owner_run_created "
+        "ON action_logs(owner_agent_id, run_id, created_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_action_logs_status_created "
+        "ON action_logs(status, created_at DESC)"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_action_logs_owner_idempotency "
+        "ON action_logs(owner_agent_id, idempotency_key) "
+        "WHERE idempotency_key IS NOT NULL"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_action_logs_parent "
+        "ON action_logs(parent_action_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_action_logs_rollback "
+        "ON action_logs(rollback_action_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_autonomy_owner_run_created "
+        "ON autonomy_checkpoints(owner_agent_id, run_id, created_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_autonomy_goal_created "
+        "ON autonomy_checkpoints(goal_id, created_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_autonomy_action_created "
+        "ON autonomy_checkpoints(action_id, created_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_autonomy_verdict_created "
+        "ON autonomy_checkpoints(verdict, created_at DESC)"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_autonomy_owner_idempotency "
+        "ON autonomy_checkpoints(owner_agent_id, idempotency_key) "
+        "WHERE idempotency_key IS NOT NULL"
     )
     conn.executemany(
         "INSERT OR IGNORE INTO importance_keywords (keyword, score) VALUES (?, ?)",

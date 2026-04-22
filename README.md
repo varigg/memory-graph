@@ -252,6 +252,58 @@ Stale private cleanup behavior:
   deterministic deletion summary
 - optional `owner_agent_id` narrows cleanup to one owner's private memories
 
+### Goals + Action Logs + Autonomy Checks (Harness Bridge Primitives M1-M3)
+
+- `POST /goal`
+  - Body: `title` (required), `owner_agent_id` (required)
+  - Optional: `status` (`active|blocked|completed|abandoned`), `utility`,
+    `deadline`, `constraints` (JSON object), `success_criteria` (JSON object),
+    `risk_tier` (`low|medium|high|critical`), `autonomy_level_requested`,
+    `autonomy_level_effective`, `run_id`, `idempotency_key`
+  - Response: `201 {"id": <int>}`; idempotent replay returns `200` with
+    `{"id": <int>, "idempotent_replay": true}`
+- `GET /goal/<id>`
+- `GET /goal/list?limit=<int>&offset=<int>&owner_agent_id=<id>&status=<status>&run_id=<id>`
+- `POST /goal/<id>/status`
+  - Body: `owner_agent_id` (required), `status` (required), `reason` (optional)
+
+Bridge response-shape note for goals:
+
+- `GET /goal/<id>` and `GET /goal/list` include parsed `constraints` and
+  `success_criteria` objects for read/write symmetry
+- raw `constraints_json` and `success_criteria_json` fields remain in responses
+  for backward compatibility
+
+- `POST /action-log`
+  - Body: `goal_id` (required), `action_type` (required), `mode` (required),
+    `status` (required), `owner_agent_id` (required)
+  - Optional: `parent_action_id`, `tool_name`, `input_summary`,
+    `expected_result`, `observed_result`, `rollback_action_id`, `run_id`,
+    `idempotency_key`
+  - Response: `201 {"id": <int>}`; idempotent replay returns `200` with
+    `{"id": <int>, "idempotent_replay": true}`
+- `GET /action-log/list?limit=<int>&offset=<int>&owner_agent_id=<id>&goal_id=<id>&status=<status>&run_id=<id>`
+- `POST /action-log/<id>/complete`
+  - Body: `owner_agent_id` (required),
+    `status` (`succeeded|failed|rolled_back`),
+    `observed_result` (optional), `rollback_action_id` (optional)
+
+- `POST /autonomy/check`
+  - Body: `requested_level` (required int), `approved_level` (required int),
+    `verdict` (`approved|denied|sandbox_only`), `owner_agent_id` (required)
+  - Optional: `goal_id`, `action_id`, `rationale`,
+    `stop_conditions` (JSON object), `rollback_required` (bool),
+    `reviewer_type` (`policy|human|system`, default `system`),
+    `run_id`, `idempotency_key`
+  - Response: `201 {"id": <int>}`; idempotent replay returns `200` with
+    `{"id": <int>, "idempotent_replay": true}`
+- `GET /autonomy/check/list?limit=<int>&offset=<int>&owner_agent_id=<id>&goal_id=<id>&action_id=<id>&verdict=<v>&reviewer_type=<t>&run_id=<id>`
+
+Bridge response-shape note for autonomy checkpoints:
+
+- `GET /autonomy/check/list` includes parsed `stop_conditions` object in
+  addition to `stop_conditions_json`
+
 ### Entities
 
 - `POST /entity`
