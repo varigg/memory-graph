@@ -238,10 +238,10 @@ but are now present in the codebase:
 ## Suggested Sprint Order
 
 1. Sprint A: operational adoption of memory signals so the usefulness scorecard becomes meaningful in real workflows (complete; 2026-04-21)
-   - See `docs/plans/sprint-a-memory-signal-adoption.md` for implementation plan
+  - Implementation outcomes are captured in `docs/phase3-consolidated.md` and `docs/deep-dive/operations-and-maintenance.md`
 2. Sprint B: P3C-3 stale private memory cleanup (complete; 2026-04-21)
 
-- See `docs/plans/sprint-b-stale-private-memory-cleanup.md` for implementation details and validation
+- Implementation outcomes are captured in `docs/phase3-consolidated.md` and `docs/deep-dive/lifecycle-and-trust.md`
 
 3. Sprint C: P3C-4 additional operational maintenance follow-ons (complete; 2026-04-21)
 

@@ -335,9 +335,6 @@ This document consolidates the historical and planning intent from:
 - `docs/phase3b.md`
 - `docs/phase3c.md`
 - `docs/phase3-backlog.md`
-- `docs/plans/sprint-a-memory-signal-adoption.md`
-- `docs/plans/sprint-b-stale-private-memory-cleanup.md`
-- `docs/plans/sprint-c-operational-maintenance-follow-ons.md`
 
 Those files may still be useful as detailed execution records, but this file is
 the single consolidated retrospective summary for Phase 3.

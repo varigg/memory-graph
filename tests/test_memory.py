@@ -1523,7 +1523,7 @@ class TestMemoryReadScoping:
 #
 # These tests document the expected all-or-nothing behavior for multi-row
 # write operations. Tests marked xfail prove bugs that the transactional
-# write refactor (see docs/plans/transactional-write-guarantees.md) must fix.
+# write invariants (see docs/deep-dive/write-atomicity.md) must satisfy.
 # Remove the xfail marker once the refactor makes the assertion pass.
 # ---------------------------------------------------------------------------
 
