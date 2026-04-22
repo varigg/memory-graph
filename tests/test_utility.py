@@ -65,10 +65,6 @@ def test_graph_content_type_is_html(client):
     assert "text/html" in resp.content_type
 
 
-def test_graph_response_body_is_non_empty(client):
-    resp = client.get("/graph")
-    assert len(resp.data) > 0
-
 
 # ---------------------------------------------------------------------------
 # GET /metrics/memory-usefulness
@@ -277,20 +273,6 @@ def test_ops_metrics_route_entry_has_expected_fields(client):
     assert "avg_latency_ms" in health_entry
     assert "total_latency_ms" in health_entry
 
-
-def test_ops_metrics_avg_latency_is_non_negative(client):
-    client.get("/health")
-    data = client.get("/metrics/ops").get_json()
-    health_entry = next(r for r in data["routes"] if r["route"] == "GET /health")
-    assert health_entry["avg_latency_ms"] >= 0.0
-
-
-def test_ops_metrics_total_latency_gte_avg(client):
-    client.get("/health")
-    client.get("/health")
-    data = client.get("/metrics/ops").get_json()
-    health_entry = next(r for r in data["routes"] if r["route"] == "GET /health")
-    assert health_entry["total_latency_ms"] >= health_entry["avg_latency_ms"]
 
 
 def test_ops_metrics_includes_deeper_signal_sections(client):

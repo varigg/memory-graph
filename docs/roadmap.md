@@ -106,6 +106,7 @@ Additional future work, only when justified by concrete local need or by an expl
 - SQLite runtime hardening (connection pragmas and local-concurrency safeguards)
 - persisted ops history or task-run trend storage if in-memory local metrics stop being sufficient
 - autonomous decision event ledger if the bridge primitives are not enough for harness auditability
+- memory request model parser cleanup: deduplicate repeated validation-error mapping in `services/memory_request_models.py` while preserving current request/response behavior and error messages
 - full harness runtime only if this repository is intentionally expanded beyond the memory substrate role
 
 This ordering is intentionally biased toward reaching harness v2 quickly without turning Memory Graph into the full harness runtime described in `harness.md`.

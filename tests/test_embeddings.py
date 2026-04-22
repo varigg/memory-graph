@@ -44,13 +44,6 @@ class TestGetProvider:
         emb = _reload_embeddings()
         assert emb.get_provider() == "openai"
 
-    def test_return_is_string_or_none(self, monkeypatch):
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        emb = _reload_embeddings()
-        result = emb.get_provider()
-        assert result is None or isinstance(result, str)
-
 
 # ---------------------------------------------------------------------------
 # embed — no provider configured

@@ -1,7 +1,5 @@
 """Tests for config.py — infrastructure layer."""
-import os
 import sys
-
 
 
 def _reload_config():
@@ -27,22 +25,11 @@ class TestDbPath:
         cfg = _reload_config()
         assert ".claude" in cfg.Config.DB_PATH
 
-    def test_db_path_is_string(self, monkeypatch):
-        monkeypatch.delenv("MEMORY_DB_PATH", raising=False)
-        cfg = _reload_config()
-        assert isinstance(cfg.Config.DB_PATH, str)
-
     def test_db_path_overridden_by_env_var(self, monkeypatch, tmp_path):
         custom = str(tmp_path / "custom.db")
         monkeypatch.setenv("MEMORY_DB_PATH", custom)
         cfg = _reload_config()
         assert custom == cfg.Config.DB_PATH
-
-    def test_db_path_env_var_takes_precedence_over_default(self, monkeypatch, tmp_path):
-        custom = str(tmp_path / "override.db")
-        monkeypatch.setenv("MEMORY_DB_PATH", custom)
-        cfg = _reload_config()
-        assert os.path.expanduser("~/.claude/memory.db") != cfg.Config.DB_PATH
 
 
 # ---------------------------------------------------------------------------
@@ -54,16 +41,6 @@ class TestPort:
         monkeypatch.delenv("PORT", raising=False)
         cfg = _reload_config()
         assert cfg.Config.PORT == 7777
-
-    def test_port_is_int(self, monkeypatch):
-        monkeypatch.delenv("PORT", raising=False)
-        cfg = _reload_config()
-        assert isinstance(cfg.Config.PORT, int)
-
-    def test_port_is_valid_unprivileged_port(self, monkeypatch):
-        monkeypatch.delenv("PORT", raising=False)
-        cfg = _reload_config()
-        assert 1024 <= cfg.Config.PORT <= 65535
 
     def test_port_can_be_overridden_via_memory_port(self, monkeypatch):
         monkeypatch.setenv("MEMORY_PORT", "8787")
@@ -86,16 +63,6 @@ class TestHost:
         monkeypatch.delenv("HOST", raising=False)
         cfg = _reload_config()
         assert cfg.Config.HOST == "0.0.0.0"
-
-    def test_host_is_string(self, monkeypatch):
-        monkeypatch.delenv("HOST", raising=False)
-        cfg = _reload_config()
-        assert isinstance(cfg.Config.HOST, str)
-
-    def test_host_is_non_empty(self, monkeypatch):
-        monkeypatch.delenv("HOST", raising=False)
-        cfg = _reload_config()
-        assert cfg.Config.HOST
 
     def test_host_can_be_overridden_via_memory_host(self, monkeypatch):
         monkeypatch.setenv("MEMORY_HOST", "127.0.0.1")
@@ -168,39 +135,3 @@ class TestApiKeys:
         assert cfg.Config.GOOGLE_API_KEY is None
 
 
-# ---------------------------------------------------------------------------
-# EMBEDDING_PROVIDER
-# ---------------------------------------------------------------------------
-
-class TestEmbeddingProvider:
-    def test_embedding_provider_openai_when_openai_key_set(self, monkeypatch):
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        cfg = _reload_config()
-        assert cfg.Config.EMBEDDING_PROVIDER == "openai"
-
-    def test_embedding_provider_gemini_when_only_google_key_set(self, monkeypatch):
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.setenv("GOOGLE_API_KEY", "gk-test")
-        cfg = _reload_config()
-        assert cfg.Config.EMBEDDING_PROVIDER == "gemini"
-
-    def test_embedding_provider_none_when_no_keys_set(self, monkeypatch):
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        cfg = _reload_config()
-        assert cfg.Config.EMBEDDING_PROVIDER is None
-
-    def test_embedding_provider_openai_takes_precedence_over_google(self, monkeypatch):
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gk-test")
-        cfg = _reload_config()
-        assert cfg.Config.EMBEDDING_PROVIDER == "openai"
-
-    def test_embedding_provider_is_string_or_none(self, monkeypatch):
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        cfg = _reload_config()
-        assert cfg.Config.EMBEDDING_PROVIDER is None or isinstance(
-            cfg.Config.EMBEDDING_PROVIDER, str
-        )

@@ -1527,7 +1527,6 @@ class TestMemoryReadScoping:
 # Remove the xfail marker once the refactor makes the assertion pass.
 # ---------------------------------------------------------------------------
 
-import pytest
 
 
 def test_batch_write_partial_failure_commits_no_rows(client):

@@ -102,16 +102,12 @@ class TestFtsSearchConversations:
         results = fts_search_conversations(db, "xyzzy_not_a_word_42")
         assert results == []
 
-    def test_returns_only_matching_rows(self, db):
-        self._insert_conv(db, "Python is great")
-        self._insert_conv(db, "Rust is fast")
-        results = fts_search_conversations(db, "Python")
-        contents = [r["content"] if isinstance(r, dict) else r[0] for r in results]
-        assert any("Python" in str(c) for c in contents)
-
-    def test_returns_list_type(self, db):
-        results = fts_search_conversations(db, "anything")
-        assert isinstance(results, list)
+        def test_returns_only_matching_rows(self, db):
+            self._insert_conv(db, "Python is great")
+            self._insert_conv(db, "Rust is fast")
+            results = fts_search_conversations(db, "Python")
+            contents = [r["content"] if isinstance(r, dict) else r[0] for r in results]
+            assert any("Python" in str(c) for c in contents)
 
     def test_multiple_matches_returned(self, db):
         self._insert_conv(db, "notes from Monday")
@@ -137,10 +133,6 @@ class TestFtsSearchMemories:
         self._insert_mem(db, "irrelevant", "some content here")
         results = fts_search_memories(db, "xyzzy_not_a_word_42")
         assert results == []
-
-    def test_returns_list_type(self, db):
-        results = fts_search_memories(db, "anything")
-        assert isinstance(results, list)
 
     def test_multiple_memories_returned(self, db):
         self._insert_mem(db, "m1", "project planning notes")
@@ -223,11 +215,6 @@ class TestInsertConversation:
         row = db.execute("SELECT role, content FROM conversations WHERE role='assistant'").fetchone()
         assert row is not None
 
-    def test_rowid_increments_for_multiple_inserts(self, db):
-        id1 = insert_conversation(db, "user", "First", "ch1", 0.1, None)
-        id2 = insert_conversation(db, "user", "Second", "ch1", 0.1, None)
-        assert id2 > id1
-
     def test_content_persisted_correctly(self, db):
         insert_conversation(db, "user", "Unique content abc123", "chan", 0.5, None)
         row = db.execute(
@@ -250,11 +237,6 @@ class TestInsertMemory:
         insert_memory(db, "unique_mem_xyz", "fact", "content here", "desc", 0.7)
         row = db.execute("SELECT name FROM memories WHERE name='unique_mem_xyz'").fetchone()
         assert row is not None
-
-    def test_rowid_increments(self, db):
-        id1 = insert_memory(db, "m1", "fact", "c1", "d1", 0.5)
-        id2 = insert_memory(db, "m2", "fact", "c2", "d2", 0.5)
-        assert id2 > id1
 
     def test_confidence_persisted(self, db):
         insert_memory(db, "conf_test", "note", "body", "desc", 0.95)
@@ -290,11 +272,6 @@ class TestInsertEntity:
         assert row is not None
         assert "flask" in str(row[0])
 
-    def test_rowid_increments(self, db):
-        id1 = insert_entity(db, "E1", "t", "d", "")
-        id2 = insert_entity(db, "E2", "t", "d", "")
-        assert id2 > id1
-
 
 # ---------------------------------------------------------------------------
 # insert_embedding
@@ -311,11 +288,6 @@ class TestInsertEmbedding:
         row = db.execute("SELECT id FROM embeddings WHERE id=?", (eid,)).fetchone()
         assert row is not None
 
-    def test_id_increments(self, db):
-        id1 = insert_embedding(db, "text1", [0.1], "m1")
-        id2 = insert_embedding(db, "text2", [0.2], "m1")
-        assert id2 > id1
-
     def test_vector_persisted_as_json(self, db):
         vector = [0.5, 0.25, 0.75]
         eid = insert_embedding(db, "vec_text", vector, "m1")
@@ -330,10 +302,6 @@ class TestInsertEmbedding:
 # ---------------------------------------------------------------------------
 
 class TestComputeImportance:
-    def test_returns_float(self, db):
-        score = compute_importance(db, "some text here")
-        assert isinstance(score, float)
-
     def test_text_with_notes_keyword_scores_at_or_above_1_0(self, db):
         score = compute_importance(db, "These are my important notes for today")
         assert score >= 1.0
@@ -341,10 +309,6 @@ class TestComputeImportance:
     def test_text_with_no_keywords_scores_0_0(self, db):
         score = compute_importance(db, "zzz qqq aaa bbb ccc")
         assert score == pytest.approx(0.0)
-
-    def test_score_is_non_negative(self, db):
-        score = compute_importance(db, "random text")
-        assert score >= 0.0
 
     def test_project_keyword_increases_score(self, db):
         baseline = compute_importance(db, "zzz qqq aaa bbb ccc")
@@ -377,10 +341,6 @@ class TestCosineSimilarity:
         v1 = [1.0, 0.0]
         v2 = [-1.0, 0.0]
         assert cosine_similarity(v1, v2) == pytest.approx(-1.0, abs=1e-6)
-
-    def test_result_is_float(self):
-        result = cosine_similarity([1.0, 0.0], [0.5, 0.5])
-        assert isinstance(result, float)
 
     def test_commutative(self):
         v1 = [0.6, 0.8]

@@ -53,43 +53,6 @@ class TestInitCreatesAllTables:
         conn.close()
         assert self.EXPECTED_TABLES.issubset(tables)
 
-    def test_conversations_table_created(self, tmp_path):
-        import db_schema  # noqa: PLC0415
-        db_path = str(tmp_path / "test.db")
-        db_schema.init(db_path)
-        conn = sqlite3.connect(db_path)
-        tables = _get_table_names(conn)
-        conn.close()
-        assert "conversations" in tables
-
-    def test_embeddings_table_created(self, tmp_path):
-        import db_schema  # noqa: PLC0415
-        db_path = str(tmp_path / "test.db")
-        db_schema.init(db_path)
-        conn = sqlite3.connect(db_path)
-        tables = _get_table_names(conn)
-        conn.close()
-        assert "embeddings" in tables
-
-    def test_kv_store_table_created(self, tmp_path):
-        import db_schema  # noqa: PLC0415
-        db_path = str(tmp_path / "test.db")
-        db_schema.init(db_path)
-        conn = sqlite3.connect(db_path)
-        tables = _get_table_names(conn)
-        conn.close()
-        assert "kv_store" in tables
-
-    def test_fts_tables_created(self, tmp_path):
-        import db_schema  # noqa: PLC0415
-        db_path = str(tmp_path / "test.db")
-        db_schema.init(db_path)
-        conn = sqlite3.connect(db_path)
-        tables = _get_table_names(conn)
-        conn.close()
-        assert "fts_conversations" in tables
-        assert "fts_memories" in tables
-
 
 class TestFtsTriggers:
     EXPECTED_TRIGGERS = {

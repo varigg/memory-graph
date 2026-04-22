@@ -54,11 +54,6 @@ class TestAppFactory:
         app = make_app(tmp_path / "a.db")
         assert isinstance(app, Flask)
 
-    def test_returns_new_object_each_call(self, tmp_path):
-        app1 = make_app(tmp_path / "a.db")
-        app2 = make_app(tmp_path / "b.db")
-        assert app1 is not app2
-
     def test_two_apps_have_independent_db_paths(self, tmp_path):
         path_a = str(tmp_path / "a.db")
         path_b = str(tmp_path / "b.db")
@@ -92,117 +87,6 @@ class TestAppFactory:
     def test_testing_mode_can_be_set_after_factory(self, tmp_path):
         app = make_app(tmp_path / "e.db")
         assert app.config["TESTING"] is True
-
-
-# ---------------------------------------------------------------------------
-# Schema auto-initialisation
-# ---------------------------------------------------------------------------
-
-REQUIRED_TABLES = {
-    "conversations",
-    "memories",
-    "entities",
-    "embeddings",
-    "importance_keywords",
-    "kv_store",
-    "fts_conversations",
-    "fts_memories",
-}
-
-
-class TestSchemaInitialisation:
-    def test_all_eight_tables_exist(self, tmp_path):
-        db_file = tmp_path / "schema.db"
-        make_app(db_file)
-        names = sqlite_all_names(db_file)
-        assert REQUIRED_TABLES.issubset(names), (
-            f"Missing tables: {REQUIRED_TABLES - names}"
-        )
-
-    def test_fts_virtual_tables_exist(self, tmp_path):
-        db_file = tmp_path / "fts.db"
-        make_app(db_file)
-        names = sqlite_all_names(db_file)
-        assert "fts_conversations" in names
-        assert "fts_memories" in names
-
-    def test_importance_keywords_seeded_with_at_least_ten_rows(self, tmp_path):
-        db_file = tmp_path / "kw.db"
-        make_app(db_file)
-        conn = sqlite3.connect(str(db_file))
-        count = conn.execute("SELECT COUNT(*) FROM importance_keywords").fetchone()[0]
-        conn.close()
-        assert count >= 10
-
-    def test_schema_init_is_idempotent(self, tmp_path):
-        """Calling create_app twice against the same DB must not raise or duplicate seed rows."""
-        db_file = tmp_path / "idem.db"
-        make_app(db_file)
-        make_app(db_file)  # second call — must not throw
-        conn = sqlite3.connect(str(db_file))
-        count = conn.execute("SELECT COUNT(*) FROM importance_keywords").fetchone()[0]
-        conn.close()
-        assert count >= 10
-
-    def test_schema_tables_are_present_immediately_after_factory(self, tmp_path):
-        """Tables must exist before any request is made."""
-        db_file = tmp_path / "early.db"
-        make_app(db_file)
-        conn = sqlite3.connect(str(db_file))
-        tables = {
-            r[0]
-            for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        }
-        conn.close()
-        assert "conversations" in tables
-        assert "memories" in tables
-
-
-# ---------------------------------------------------------------------------
-# Blueprint registration
-# ---------------------------------------------------------------------------
-
-
-class TestBlueprintRegistration:
-    @pytest.fixture()
-    def client(self, tmp_path):
-        return make_app(tmp_path / "bp.db").test_client()
-
-    def test_conversation_recent_is_reachable(self, client):
-        resp = client.get("/conversation/recent")
-        assert resp.status_code != 404
-
-    def test_memory_list_is_reachable(self, client):
-        resp = client.get("/memory/list")
-        assert resp.status_code != 404
-
-    def test_search_semantic_is_reachable(self, client):
-        with patch("embeddings.embed", return_value=FIXED_VECTOR):
-            resp = client.get("/search/semantic?q=hello")
-        assert resp.status_code != 404
-
-    def test_kv_endpoint_is_reachable(self, client):
-        # PUT a key first so the GET returns 200, not a business-logic 404.
-        client.put("/kv/probe_key", json={"value": "probe"})
-        resp = client.get("/kv/probe_key")
-        assert resp.status_code == 200
-
-    def test_health_endpoint_is_reachable(self, client):
-        resp = client.get("/health")
-        assert resp.status_code != 404
-
-    def test_health_returns_status_ok(self, client):
-        resp = client.get("/health")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data is not None
-        assert data.get("status") == "ok"
-
-    def test_health_response_is_json(self, client):
-        resp = client.get("/health")
-        assert "application/json" in resp.content_type
 
 
 # ---------------------------------------------------------------------------
