@@ -4,6 +4,17 @@ _DEFAULT_LIMIT = 20
 _MAX_LIMIT = 100
 
 
+RETRIEVAL_PROFILES = {
+    "general": {},
+    "autonomous": {
+        "status": "active",
+        "min_confidence": 0.7,
+        "recency_half_life_hours": 168.0,
+        "_require_agent_id": True,
+    },
+}
+
+
 def parse_limit_offset():
     raw_limit = request.args.get("limit")
     raw_offset = request.args.get("offset")
@@ -30,6 +41,23 @@ def parse_scope_flags():
         return None, None, jsonify({"error": "Cannot specify both shared_only and private_only"}), 400
 
     return shared_only, private_only, None, None
+
+
+def parse_profile():
+    raw_profile = request.args.get("profile")
+    if raw_profile is None:
+        return "general", RETRIEVAL_PROFILES["general"], None, None
+
+    profile = raw_profile.strip().lower()
+    if not profile:
+        return None, None, jsonify({"error": "profile must be non-empty when provided"}), 400
+
+    defaults = RETRIEVAL_PROFILES.get(profile)
+    if defaults is None:
+        valid_profiles = ", ".join(sorted(RETRIEVAL_PROFILES.keys()))
+        return None, None, jsonify({"error": f"profile must be one of: {valid_profiles}"}), 400
+
+    return profile, defaults, None, None
 
 
 def parse_read_filters():

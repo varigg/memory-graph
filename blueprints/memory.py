@@ -1,6 +1,11 @@
 from flask import Blueprint, current_app, jsonify, request
 
-from blueprints._params import parse_limit_offset, parse_read_filters, parse_scope_flags
+from blueprints._params import (
+    parse_limit_offset,
+    parse_profile,
+    parse_read_filters,
+    parse_scope_flags,
+)
 from db_utils import get_db, write_transaction
 from services.memory_lifecycle_service import (
     cleanup_stale_private_memories,
@@ -25,6 +30,22 @@ from services.ops_metrics_service import record_retrieval_observation
 from storage.entity_repository import insert_entity, search_entities
 
 bp = Blueprint("memory", __name__)
+
+
+def _apply_profile_defaults(profile_defaults, status, min_confidence, recency_half_life_hours):
+    if request.args.get("status") is None:
+        status = profile_defaults.get("status", status)
+    if min_confidence is None and "min_confidence" in profile_defaults:
+        min_confidence = profile_defaults["min_confidence"]
+    if recency_half_life_hours is None and "recency_half_life_hours" in profile_defaults:
+        recency_half_life_hours = profile_defaults["recency_half_life_hours"]
+    return status, min_confidence, recency_half_life_hours
+
+
+def _validate_profile_requirements(profile_defaults, agent_id):
+    if profile_defaults.get("_require_agent_id") and (agent_id is None or not agent_id.strip()):
+        return jsonify({"error": "agent_id is required for the autonomous profile"}), 400
+    return None, None
 
 
 @bp.route("/memory", methods=["POST"])
@@ -228,11 +249,19 @@ def supersede_memory():
 
 @bp.route("/memory/list", methods=["GET"])
 def list_memories():
+    _, profile_defaults, err_resp, err_status = parse_profile()
+    if err_resp is not None:
+        return err_resp, err_status
+
     limit, offset, err_resp, err_status = parse_limit_offset()
     if err_resp is not None:
         return err_resp, err_status
 
     agent_id = request.args.get("agent_id")
+    err_resp, err_status = _validate_profile_requirements(profile_defaults, agent_id)
+    if err_resp is not None:
+        return err_resp, err_status
+
     shared_only, private_only, err_resp, err_status = parse_scope_flags()
     if err_resp is not None:
         return err_resp, err_status
@@ -253,6 +282,13 @@ def list_memories():
     ) = parse_read_filters()
     if err_resp is not None:
         return err_resp, err_status
+
+    status, min_confidence, recency_half_life_hours = _apply_profile_defaults(
+        profile_defaults,
+        status,
+        min_confidence,
+        recency_half_life_hours,
+    )
 
     db = get_db()
     rows = list_memories_service(
@@ -280,6 +316,10 @@ def list_memories():
 
 @bp.route("/memory/recall", methods=["GET"])
 def recall_memory():
+    _, profile_defaults, err_resp, err_status = parse_profile()
+    if err_resp is not None:
+        return err_resp, err_status
+
     topic = request.args.get("topic")
     if topic is None:
         return jsonify({"error": "topic parameter required"}), 400
@@ -292,6 +332,10 @@ def recall_memory():
         return err_resp, err_status
 
     agent_id = request.args.get("agent_id")
+    err_resp, err_status = _validate_profile_requirements(profile_defaults, agent_id)
+    if err_resp is not None:
+        return err_resp, err_status
+
     shared_only, private_only, err_resp, err_status = parse_scope_flags()
     if err_resp is not None:
         return err_resp, err_status
@@ -312,6 +356,13 @@ def recall_memory():
     ) = parse_read_filters()
     if err_resp is not None:
         return err_resp, err_status
+
+    status, min_confidence, recency_half_life_hours = _apply_profile_defaults(
+        profile_defaults,
+        status,
+        min_confidence,
+        recency_half_life_hours,
+    )
 
     db = get_db()
     results = recall_memories(
@@ -340,6 +391,10 @@ def recall_memory():
 
 @bp.route("/memory/search", methods=["GET"])
 def search_memory():
+    _, profile_defaults, err_resp, err_status = parse_profile()
+    if err_resp is not None:
+        return err_resp, err_status
+
     q = request.args.get("q")
     if q is None:
         return jsonify({"error": "q parameter required"}), 400
@@ -352,6 +407,10 @@ def search_memory():
         return err_resp, err_status
 
     agent_id = request.args.get("agent_id")
+    err_resp, err_status = _validate_profile_requirements(profile_defaults, agent_id)
+    if err_resp is not None:
+        return err_resp, err_status
+
     shared_only, private_only, err_resp, err_status = parse_scope_flags()
     if err_resp is not None:
         return err_resp, err_status
@@ -372,6 +431,13 @@ def search_memory():
     ) = parse_read_filters()
     if err_resp is not None:
         return err_resp, err_status
+
+    status, min_confidence, recency_half_life_hours = _apply_profile_defaults(
+        profile_defaults,
+        status,
+        min_confidence,
+        recency_half_life_hours,
+    )
 
     db = get_db()
     results = search_memories(

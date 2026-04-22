@@ -131,6 +131,18 @@ def test_list_memories_returns_empty_list_when_none_exist(client):
     assert client.get("/memory/list").get_json() == []
 
 
+def test_list_memories_rejects_unknown_profile(client):
+    resp = client.get("/memory/list?profile=does-not-exist")
+    assert resp.status_code == 400
+    assert "profile must be one of" in resp.get_json()["error"]
+
+
+def test_list_memories_without_profile_keeps_current_behavior(client):
+    resp = client.get("/memory/list")
+    assert resp.status_code == 200
+    assert isinstance(resp.get_json(), list)
+
+
 def test_list_memories_contains_inserted_memory(client):
     client.post(
         "/memory",
@@ -198,6 +210,66 @@ def test_list_memories_filters_by_min_confidence(client):
 
     items = client.get("/memory/list?min_confidence=0.5").get_json()
     assert all(i["confidence"] >= 0.5 for i in items)
+
+
+def test_list_memories_autonomous_profile_applies_default_min_confidence(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="auto-high", content="alpha"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="auto-low", content="beta"),
+    )
+
+    low_id = next(i["id"] for i in client.get("/memory/list").get_json() if i["name"] == "auto-low")
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute("UPDATE memories SET confidence = 0.1 WHERE id = ?", (low_id,))
+        db.commit()
+
+    items = client.get("/memory/list?profile=autonomous&agent_id=agent-alpha").get_json()
+    names = {i["name"] for i in items}
+    assert "auto-high" in names
+    assert "auto-low" not in names
+
+
+def test_list_memories_profile_default_can_be_overridden_by_explicit_param(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="override-high", content="alpha"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="override-low", content="beta"),
+    )
+
+    low_id = next(i["id"] for i in client.get("/memory/list").get_json() if i["name"] == "override-low")
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute("UPDATE memories SET confidence = 0.1 WHERE id = ?", (low_id,))
+        db.commit()
+
+    items = client.get(
+        "/memory/list?profile=autonomous&agent_id=agent-alpha&min_confidence=0"
+    ).get_json()
+    names = {i["name"] for i in items}
+    assert "override-high" in names
+    assert "override-low" in names
+
+
+def test_list_memories_autonomous_profile_requires_agent_id(client):
+    resp = client.get("/memory/list?profile=autonomous")
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "agent_id is required for the autonomous profile"
+
+
+def test_list_memories_general_profile_allows_missing_agent_id(client):
+    resp = client.get("/memory/list?profile=general")
+    assert resp.status_code == 200
+    assert isinstance(resp.get_json(), list)
 
 
 def test_list_memories_filters_by_metadata_string_value(client):
@@ -268,6 +340,12 @@ def test_recall_returns_200_with_list(client):
     assert isinstance(resp.get_json(), list)
 
 
+def test_recall_rejects_unknown_profile(client):
+    resp = client.get("/memory/recall?topic=anything&profile=unknown")
+    assert resp.status_code == 400
+    assert "profile must be one of" in resp.get_json()["error"]
+
+
 def test_recall_finds_matching_memory_by_name(client):
     client.post(
         "/memory",
@@ -307,6 +385,37 @@ def test_recall_rejects_blank_topic(client):
     assert resp.status_code == 400
 
 
+def test_recall_autonomous_profile_applies_default_min_confidence(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="recall-high", content="profile-recall-token"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="recall-low", content="profile-recall-token"),
+    )
+
+    low_id = next(i["id"] for i in client.get("/memory/list").get_json() if i["name"] == "recall-low")
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute("UPDATE memories SET confidence = 0.1 WHERE id = ?", (low_id,))
+        db.commit()
+
+    results = client.get(
+        "/memory/recall?topic=profile-recall-token&profile=autonomous&agent_id=agent-alpha"
+    ).get_json()
+    names = {r["name"] for r in results}
+    assert "recall-high" in names
+    assert "recall-low" not in names
+
+
+def test_recall_autonomous_profile_requires_agent_id(client):
+    resp = client.get("/memory/recall?topic=anything&profile=autonomous")
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "agent_id is required for the autonomous profile"
+
+
 def test_recall_filters_by_tag(client):
     client.post(
         "/memory",
@@ -342,6 +451,12 @@ def test_memory_search_returns_200_with_list(client):
     resp = client.get("/memory/search?q=foo")
     assert resp.status_code == 200
     assert isinstance(resp.get_json(), list)
+
+
+def test_memory_search_rejects_unknown_profile(client):
+    resp = client.get("/memory/search?q=foo&profile=unknown")
+    assert resp.status_code == 400
+    assert "profile must be one of" in resp.get_json()["error"]
 
 
 def test_memory_search_returns_matching_record(client):
@@ -387,6 +502,37 @@ def test_memory_search_rejects_invalid_min_confidence(client):
 def test_memory_search_rejects_invalid_recency_half_life(client):
     resp = client.get("/memory/search?q=search&recency_half_life_hours=0")
     assert resp.status_code == 400
+
+
+def test_memory_search_autonomous_profile_applies_default_min_confidence(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="search-high", content="profile-search-token"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="search-low", content="profile-search-token"),
+    )
+
+    low_id = next(i["id"] for i in client.get("/memory/list").get_json() if i["name"] == "search-low")
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute("UPDATE memories SET confidence = 0.1 WHERE id = ?", (low_id,))
+        db.commit()
+
+    results = client.get(
+        "/memory/search?q=profile-search-token&profile=autonomous&agent_id=agent-alpha"
+    ).get_json()
+    names = {r["name"] for r in results}
+    assert "search-high" in names
+    assert "search-low" not in names
+
+
+def test_memory_search_autonomous_profile_requires_agent_id(client):
+    resp = client.get("/memory/search?q=anything&profile=autonomous")
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "agent_id is required for the autonomous profile"
 
 
 def test_memory_search_includes_parsed_metadata(client):
