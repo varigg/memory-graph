@@ -19,8 +19,12 @@ htmlcov/
 *.db
 *.sqlite
 *.sqlite3
+memory_graph.egg-info/
 
 # OS/editor
 .DS_Store
 .vscode/
 .idea/
+
+# Local git worktrees
+.worktrees/
