@@ -1521,10 +1521,9 @@ class TestMemoryReadScoping:
 # ---------------------------------------------------------------------------
 # Write atomicity invariants
 #
-# These tests document the expected all-or-nothing behavior for multi-row
-# write operations. Tests marked xfail prove bugs that the transactional
-# write invariants (see docs/deep-dive/write-atomicity.md) must satisfy.
-# Remove the xfail marker once the refactor makes the assertion pass.
+# These tests are invariant/regression tests documenting the expected
+# all-or-nothing behavior for multi-row write operations, as defined by the
+# transactional write contract (see docs/deep-dive/write-atomicity.md).
 # ---------------------------------------------------------------------------
 
 
