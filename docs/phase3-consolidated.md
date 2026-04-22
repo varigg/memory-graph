@@ -334,5 +334,6 @@ This document consolidates the historical and planning intent from:
 - subsystem invariants now captured in `docs/deep-dive/`
 - canonical feature status in `docs/roadmap.md`
 
-Those files may still be useful as detailed execution records, but this file is
-the single consolidated retrospective summary for Phase 3.
+Those files are the canonical references for current implementation details and
+ongoing prioritization, while this file remains the consolidated retrospective
+summary for Phase 3.

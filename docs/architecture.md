@@ -293,9 +293,9 @@ This avoids two failure modes:
 ## Near-Term Architectural Priorities
 
 1. Keep retrieval profile behavior stable and explicit across memory read
-  endpoints (`profile=general|autonomous`) as additional read surfaces evolve.
+   endpoints (`profile=general|autonomous`) as additional read surfaces evolve.
 2. Keep service-owned transaction boundaries consistent for multi-step write
-  flows and avoid reintroducing repository-level implicit commits.
+   flows and avoid reintroducing repository-level implicit commits.
 3. Add the minimum harness-facing bridge primitives needed for v2 integration
    only after retrieval and write invariants are reliable.
 4. Add stronger isolation-friendly seams and focused unit tests around service
