@@ -78,11 +78,22 @@ Primary planning document for item 1:
 
 - `docs/plans/transactional-write-guarantees.md`
 
+Transactional write guarantees are **implemented** (2026-04-21). `write_transaction` context manager
+added to `db_utils.py`; `insert_memory` and `delete_memories_by_ids` no longer auto-commit;
+batch orchestration moved into a service-owned transaction; lifecycle service migrated onto the
+same pattern. All 437 tests pass.
+
 Recommended implementation order after Phase 3:
 
-1. Transactional write guarantees (atomic multi-row operations for batch and lifecycle flows)
+1. ~~Transactional write guarantees~~ **Implemented** (2026-04-21) — `write_transaction` context manager, composable repository helpers, atomic batch and lifecycle flows. See `docs/plans/transactional-write-guarantees.md`.
 2. Explicit retrieval profiles for autonomous versus general clients so the harness can rely on stable default retrieval behavior
 3. Minimal harness bridge primitives (goal/action-log/autonomy-checkpoint surfaces) once transactional and retrieval invariants are stable
+
+The next planned item is **explicit retrieval profiles**.
+
+Primary planning document for item 2:
+
+- `docs/plans/explicit-retrieval-profiles.md`
 
 Primary planning document for item 3:
 

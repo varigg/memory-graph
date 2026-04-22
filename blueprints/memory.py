@@ -404,8 +404,8 @@ def delete_memory(memory_id):
     row = db.execute("SELECT id FROM memories WHERE id = ?", (memory_id,)).fetchone()
     if row is None:
         return jsonify({"error": "not found"}), 404
-    db.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
-    db.commit()
+    with write_transaction(db):
+        db.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
     return jsonify({"deleted": memory_id}), 200
 
 
