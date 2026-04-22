@@ -280,8 +280,9 @@ and not a retroactive ADR for every historical detail.
   over time.
 - `docs/conversation-outcomes.md` remains the discussion outcome ledger.
 - `docs/roadmap.md` remains the status tracker.
-- `docs/plans/` is for active implementation planning only; implemented plans
-  should become concise historical pointers.
+- `docs/plans/` is for active implementation planning only; once a plan's
+  durable implementation details are promoted into `docs/deep-dive/` or other
+  canonical docs, the completed plan should be removed.
 
 This avoids two failure modes:
 

@@ -21,5 +21,5 @@ sequenced.
 ## Relationship To Plans
 
 `docs/plans/` is for active implementation planning. Once a plan is
-implemented, durable outcomes should be captured here and the plan should be
-reduced to a concise historical pointer.
+implemented, durable outcomes should be captured here and the completed plan
+document should be removed.

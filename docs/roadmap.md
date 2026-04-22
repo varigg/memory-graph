@@ -115,4 +115,4 @@ Future work should be planned using feature-specific implementation plans rather
 1. **During Phase 3**: When a Phase 3 feature changes status, update this file in the same change set as the code or documentation change that caused the status change.
 2. **Post-Phase-3 planning**: Once Phase 3 is complete, scope subsequent work through feature-specific implementation plans rather than a new phase umbrella.
 3. **Implementation plans**: For each post-Phase-3 feature, create a feature-specific implementation plan. Store implementation plans in `docs/plans/` with the naming convention `<feature-name>.md`.
-4. **After implementation**: Move durable subsystem details from the plan into `docs/deep-dive/`, then reduce the plan file to a concise historical pointer.
+4. **After implementation**: Move durable subsystem details and outcomes from the plan into long-lived documentation such as `docs/deep-dive/` and `docs/adr/` as appropriate; once those durable outcomes are captured, remove the completed plan from `docs/plans/`.

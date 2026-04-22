@@ -16,10 +16,14 @@ All three return a bare JSON array of memory objects.
 
 `profile` is an optional query parameter with server-declared values:
 
-- `general`: default permissive behavior
+- `general`: baseline/default retrieval behavior
 - `autonomous`: conservative defaults for restart-sensitive agents
 
-Autonomous defaults apply only when the caller does not provide explicit values:
+Baseline retrieval behavior defaults to `status=active` unless the caller
+explicitly overrides `status`.
+
+`profile=autonomous` adds the following defaults only when the caller does not
+provide explicit values:
 
 - `status=active`
 - `min_confidence=0.7`
