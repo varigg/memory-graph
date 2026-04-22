@@ -107,6 +107,13 @@ class AutonomyCheckpointPayload(_BaseRequestModel):
     idempotency_key: StrictStr | None = None
 
 
+def _serialize_json_object(value: dict[str, Any], field_name: str) -> str:
+    try:
+        return json.dumps(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be JSON-serializable") from exc
+
+
 def parse_action_payload(data: Any) -> dict:
     body = _require_json_body(data)
     try:
@@ -281,8 +288,8 @@ def parse_goal_create_payload(data: Any) -> dict:
         "status": payload.status,
         "utility": float(payload.utility),
         "deadline": deadline,
-        "constraints_json": json.dumps(constraints),
-        "success_criteria_json": json.dumps(success_criteria),
+        "constraints_json": _serialize_json_object(constraints, "constraints"),
+        "success_criteria_json": _serialize_json_object(success_criteria, "success_criteria"),
         "risk_tier": payload.risk_tier,
         "autonomy_level_requested": requested_level,
         "autonomy_level_effective": effective_level,
@@ -488,7 +495,7 @@ def parse_autonomy_checkpoint_payload(data: Any) -> dict:
         "approved_level": payload.approved_level,
         "verdict": payload.verdict,
         "rationale": rationale,
-        "stop_conditions_json": json.dumps(stop_conditions),
+        "stop_conditions_json": _serialize_json_object(stop_conditions, "stop_conditions"),
         "rollback_required": payload.rollback_required,
         "reviewer_type": payload.reviewer_type,
         "owner_agent_id": owner_agent_id,

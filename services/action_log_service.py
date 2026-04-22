@@ -52,23 +52,31 @@ def create_or_get_action_log(db: sqlite3.Connection, payload: dict) -> dict:
         if existing is not None:
             return {"id": int(existing["id"]), "created": False}, None
 
-    with write_transaction(db):
-        action_id = insert_action_log(
-            db,
-            goal_id=payload["goal_id"],
-            parent_action_id=payload["parent_action_id"],
-            action_type=payload["action_type"],
-            tool_name=payload["tool_name"],
-            mode=payload["mode"],
-            status=payload["status"],
-            input_summary=payload["input_summary"],
-            expected_result=payload["expected_result"],
-            observed_result=payload["observed_result"],
-            rollback_action_id=payload["rollback_action_id"],
-            owner_agent_id=owner_agent_id,
-            run_id=payload["run_id"],
-            idempotency_key=idempotency_key,
-        )
+    try:
+        with write_transaction(db):
+            action_id = insert_action_log(
+                db,
+                goal_id=payload["goal_id"],
+                parent_action_id=payload["parent_action_id"],
+                action_type=payload["action_type"],
+                tool_name=payload["tool_name"],
+                mode=payload["mode"],
+                status=payload["status"],
+                input_summary=payload["input_summary"],
+                expected_result=payload["expected_result"],
+                observed_result=payload["observed_result"],
+                rollback_action_id=payload["rollback_action_id"],
+                owner_agent_id=owner_agent_id,
+                run_id=payload["run_id"],
+                idempotency_key=idempotency_key,
+            )
+    except sqlite3.IntegrityError:
+        if not idempotency_key:
+            raise
+        existing = get_action_log_by_idempotency_key(db, owner_agent_id, idempotency_key)
+        if existing is None:
+            raise
+        return {"id": int(existing["id"]), "created": False}, None
     return {"id": action_id, "created": True}, None
 
 

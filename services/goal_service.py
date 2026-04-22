@@ -28,30 +28,38 @@ def create_or_get_goal(db: sqlite3.Connection, payload: dict) -> dict:
         if existing is not None:
             return {"id": int(existing["id"]), "created": False}
 
-    with write_transaction(db):
-        goal_id = insert_goal(
-            db,
-            title=payload["title"],
-            owner_agent_id=owner_agent_id,
-            status=payload["status"],
-            utility=payload["utility"],
-            deadline=payload["deadline"],
-            constraints_json=payload["constraints_json"],
-            success_criteria_json=payload["success_criteria_json"],
-            risk_tier=payload["risk_tier"],
-            autonomy_level_requested=payload["autonomy_level_requested"],
-            autonomy_level_effective=payload["autonomy_level_effective"],
-            run_id=payload["run_id"],
-            idempotency_key=idempotency_key,
-        )
-        append_goal_status_history(
-            db,
-            goal_id=goal_id,
-            old_status=None,
-            new_status=payload["status"],
-            changed_by_agent_id=owner_agent_id,
-            reason="created",
-        )
+    try:
+        with write_transaction(db):
+            goal_id = insert_goal(
+                db,
+                title=payload["title"],
+                owner_agent_id=owner_agent_id,
+                status=payload["status"],
+                utility=payload["utility"],
+                deadline=payload["deadline"],
+                constraints_json=payload["constraints_json"],
+                success_criteria_json=payload["success_criteria_json"],
+                risk_tier=payload["risk_tier"],
+                autonomy_level_requested=payload["autonomy_level_requested"],
+                autonomy_level_effective=payload["autonomy_level_effective"],
+                run_id=payload["run_id"],
+                idempotency_key=idempotency_key,
+            )
+            append_goal_status_history(
+                db,
+                goal_id=goal_id,
+                old_status=None,
+                new_status=payload["status"],
+                changed_by_agent_id=owner_agent_id,
+                reason="created",
+            )
+    except sqlite3.IntegrityError:
+        if not idempotency_key:
+            raise
+        existing = get_goal_by_idempotency_key(db, owner_agent_id, idempotency_key)
+        if existing is None:
+            raise
+        return {"id": int(existing["id"]), "created": False}
     return {"id": goal_id, "created": True}
 
 

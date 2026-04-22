@@ -10,8 +10,9 @@ This directory is for active implementation planning.
 3. After implementation, promote durable system-state outcomes to
    `docs/deep-dive/`.
 4. Remove completed plan documents after durable outcomes are captured in
-   `docs/deep-dive/`, `docs/roadmap.md`, and other canonical docs.
+   `docs/deep-dive/`, `docs/roadmap.md`, and other canonical docs, unless a
+   completed plan is intentionally retained as an implementation record.
 
-## Current Active Planning Documents
+## Current Planning Documents
 
-- `harness-v2-bridge-primitives.md`
+- `harness-v2-bridge-primitives.md` (completed implementation record)

@@ -53,22 +53,30 @@ def create_or_get_autonomy_checkpoint(db: sqlite3.Connection, payload: dict):
         if existing is not None:
             return {"id": int(existing["id"]), "created": False}, None
 
-    with write_transaction(db):
-        checkpoint_id = insert_autonomy_checkpoint(
-            db,
-            goal_id=goal_id,
-            action_id=action_id,
-            requested_level=requested_level,
-            approved_level=approved_level,
-            verdict=payload["verdict"],
-            rationale=payload["rationale"],
-            stop_conditions_json=payload["stop_conditions_json"],
-            rollback_required=payload["rollback_required"],
-            reviewer_type=payload["reviewer_type"],
-            owner_agent_id=owner_agent_id,
-            run_id=payload["run_id"],
-            idempotency_key=idempotency_key,
-        )
+    try:
+        with write_transaction(db):
+            checkpoint_id = insert_autonomy_checkpoint(
+                db,
+                goal_id=goal_id,
+                action_id=action_id,
+                requested_level=requested_level,
+                approved_level=approved_level,
+                verdict=payload["verdict"],
+                rationale=payload["rationale"],
+                stop_conditions_json=payload["stop_conditions_json"],
+                rollback_required=payload["rollback_required"],
+                reviewer_type=payload["reviewer_type"],
+                owner_agent_id=owner_agent_id,
+                run_id=payload["run_id"],
+                idempotency_key=idempotency_key,
+            )
+    except sqlite3.IntegrityError:
+        if not idempotency_key:
+            raise
+        existing = get_autonomy_checkpoint_by_idempotency_key(db, owner_agent_id, idempotency_key)
+        if existing is None:
+            raise
+        return {"id": int(existing["id"]), "created": False}, None
     return {"id": checkpoint_id, "created": True}, None
 
 
