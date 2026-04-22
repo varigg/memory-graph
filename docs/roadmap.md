@@ -13,10 +13,12 @@ Use this file when you want the current state of the project in one place:
 
 - `plan-memoryGraphFlaskApi.prompt.md` is the original feature/spec prompt.
 - `docs/architecture.md` is the current architecture narrative and system-boundary document.
+- `docs/deep-dive/README.md` is the subsystem-level implementation-state companion to the architecture doc.
 - `docs/adr/README.md` is the index of durable architecture decision records.
 - `docs/phase1-2-consolidated.md` is the retrospective summary of early review and implementation work.
 - `docs/phase3-consolidated.md` is the consolidated retrospective summary of Phase 3 implementation, rationale, and decisions.
 - `docs/phase3-backlog.md` is the detailed Phase 3 task breakdown.
+- `docs/plans/README.md` defines the plan document lifecycle and active-plan usage.
 - `docs/conversation-outcomes.md` records major discussion outcomes and rationale.
 - `harness.md` is the target-state autonomous-agent vision.
 
@@ -70,24 +72,18 @@ Pydantic validation at the service boundary is implemented for memory write and 
 
 The shortest defensible path to harness v2 is to finish the substrate work that the harness will depend on, then add only the minimum bridge primitives needed for the first real integration.
 
-The next planned feature is transactional write guarantees:
-
-- atomic multi-row operations for batch and lifecycle flows
-
-Primary planning document for item 1:
-
-- `docs/plans/transactional-write-guarantees.md`
-
 Transactional write guarantees are **implemented** (2026-04-21). `write_transaction` context manager
 added to `db_utils.py`; `insert_memory` and `delete_memories_by_ids` no longer auto-commit;
 batch orchestration moved into a service-owned transaction; lifecycle service migrated onto the
-same pattern. All 437 tests pass.
+same pattern. All 437 tests pass. Durable behavior is documented in
+`docs/deep-dive/write-atomicity.md`.
 
 Explicit retrieval profiles are **implemented** (2026-04-22). `profile=general|autonomous` is now
 supported on `/memory/list`, `/memory/recall`, and `/memory/search`; autonomous defaults are
 applied when omitted by caller (`status=active`, `min_confidence=0.7`,
 `recency_half_life_hours=168`), explicit query params still override profile defaults, and
-`profile=autonomous` requires `agent_id`.
+`profile=autonomous` requires `agent_id`. Durable behavior is documented in
+`docs/deep-dive/retrieval-contracts.md`.
 
 Recommended implementation order after Phase 3:
 
@@ -96,10 +92,6 @@ Recommended implementation order after Phase 3:
 3. Minimal harness bridge primitives (goal/action-log/autonomy-checkpoint surfaces) once retrieval and write invariants are stable
 
 The next planned item is **minimal harness bridge primitives**.
-
-Primary planning document for item 2:
-
-- `docs/plans/explicit-retrieval-profiles.md`
 
 Primary planning document for item 3:
 
@@ -124,3 +116,4 @@ Future work should be planned using feature-specific implementation plans rather
 1. **During Phase 3**: When a Phase 3 feature changes status, update this file in the same change set as the code or documentation change that caused the status change.
 2. **Post-Phase-3 planning**: Once Phase 3 is complete, scope subsequent work through feature-specific implementation plans rather than a new phase umbrella.
 3. **Implementation plans**: For each post-Phase-3 feature, create a feature-specific implementation plan. Store implementation plans in `docs/plans/` with the naming convention `<feature-name>.md`.
+4. **After implementation**: Move durable subsystem details from the plan into `docs/deep-dive/`, then reduce the plan file to a concise historical pointer.

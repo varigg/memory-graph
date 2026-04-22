@@ -5,6 +5,7 @@ exists in this form, and which boundaries are now implemented versus still
 evolving.
 
 Use this file for the current-state architecture narrative.
+Use `docs/deep-dive/` for subsystem-level implementation state and invariants.
 Use the ADRs in `docs/adr/` for durable decision records.
 Use `docs/roadmap.md` for implementation status.
 
@@ -273,10 +274,14 @@ The recommended documentation model is a **mix**, not a single monolithic file
 and not a retroactive ADR for every historical detail.
 
 - `docs/architecture.md` explains the current system shape and design intent.
+- `docs/deep-dive/` captures subsystem-level implemented behavior and
+  invariants that should stay useful after plans are complete.
 - `docs/adr/` captures durable architecture decisions that should remain stable
   over time.
 - `docs/conversation-outcomes.md` remains the discussion outcome ledger.
 - `docs/roadmap.md` remains the status tracker.
+- `docs/plans/` is for active implementation planning only; implemented plans
+  should become concise historical pointers.
 
 This avoids two failure modes:
 
