@@ -1,4 +1,7 @@
-# Phase 3B — Retrieval Quality and Memory Lifecycle (Planned)
+# Phase 3B — Retrieval Quality and Memory Lifecycle (Historical Record)
+
+This document is kept as a record of the implemented Phase 3B scope.
+For current planning, use `docs/roadmap.md` and `docs/phase3-backlog.md`.
 
 ## Goal
 
@@ -8,36 +11,30 @@ Improve utility of retrieved context and keep memory quality high over time.
 
 ### 1) Retrieval Quality
 
-- Add ranking inputs beyond lexical/semantic match:
-  - visibility (`shared` preferred when cross-agent utility is likely)
-  - confidence score
-  - recency (`updated_at` decay)
-  - optional memory status weighting
-- Add explainability fields in search results:
-  - `rank_components`
-  - `match_reasons`
+Implemented ranking inputs for memory retrieval:
+
+- visibility (`shared` preferred ahead of private)
+- confidence score
+- recency (`updated_at` fallback to `timestamp`)
 
 ### 2) Lifecycle Operations
 
-Add memory lifecycle APIs:
+Implemented lifecycle APIs:
 
-- `POST /memory/merge`
-- `POST /memory/supersede`
 - `POST /memory/archive`
 - `POST /memory/invalidate`
+- `POST /memory/merge`
+- `POST /memory/supersede`
 
 These prevent memory sprawl and preserve high-signal shared memory.
 
 ### 3) Retrieval Filters
 
-Add optional filters to memory list/search/recall:
+Implemented optional filters on memory list/search/recall:
 
 - `visibility`
 - `owner_agent_id`
 - `status`
-- `min_confidence`
-- `updated_since`
-- `tags` (if tags are introduced)
 
 ## Deployment Fit (Local, <= 12 Agents, Low Concurrency)
 
@@ -63,3 +60,11 @@ Add optional filters to memory list/search/recall:
 - Scoped retrieval produces measurably higher-quality context.
 - Lifecycle controls prevent duplicate/stale shared memories from accumulating.
 - Full test suite remains green.
+
+## Implemented
+
+- lifecycle transitions: `active -> archived|invalidated`
+- owner-checked `archive` and `invalidate` endpoints
+- relation-aware `merge` and `supersede` endpoints
+- retrieval status filter with default `active`
+- ranking hints using visibility, confidence, and recency ordering

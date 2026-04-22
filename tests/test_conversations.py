@@ -1,7 +1,5 @@
 """Tests for the conversations blueprint (/conversation/*)."""
-from unittest.mock import patch
 
-import pytest
 
 FIXED_VECTOR = [0.1, 0.2, 0.3]
 

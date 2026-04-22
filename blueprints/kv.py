@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 
-from db_operations import get_kv, upsert_kv
 from db_utils import get_db
+from storage.kv_repository import get_kv, upsert_kv
 
 bp = Blueprint("kv", __name__)
 

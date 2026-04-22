@@ -1,4 +1,7 @@
-# Phase 3A — Agent Memory Scopes (Planned)
+# Phase 3A — Agent Memory Scopes (Historical Record)
+
+This document is kept as a record of the implemented Phase 3A contract.
+For current planning, use `docs/roadmap.md` and `docs/phase3-backlog.md`.
 
 ## Goal
 
@@ -15,17 +18,17 @@ Authentication is intentionally out of scope for this phase.
 - Some memories should be shared across agents.
 - Project-level scope partitioning is not required at this time.
 
-## Functional Plan
+## Implemented Contract
 
 ### 1) Memory Ownership + Visibility
 
-Add ownership and visibility metadata to memory records.
+Ownership and visibility metadata are now part of memory records.
 
 Schema additions to `memories`:
 
 - `owner_agent_id TEXT NOT NULL DEFAULT 'unknown'`
 - `visibility TEXT NOT NULL DEFAULT 'shared' CHECK (visibility IN ('shared','private'))`
-- `updated_at DATETIME DEFAULT CURRENT_TIMESTAMP`
+- `updated_at DATETIME`
 
 Behavior:
 
@@ -59,7 +62,7 @@ Validation:
 
 ### 4) Promote-to-Shared Operation
 
-Add endpoint:
+Implemented endpoint:
 
 - `POST /memory/<id>/promote`
 
@@ -71,12 +74,12 @@ Rules:
 
 ### 5) Filtering + Ranking Hooks
 
-Add visibility-aware filtering first; ranking expansion stays in 3B.
+Visibility-aware filtering is implemented; ranking expansion stays in 3B.
 
 - Memory endpoints enforce visibility clause before text search criteria.
 - Keep pagination and query validation from Phase 2C.
 
-## API Changes
+## API Contract
 
 ### Request additions
 
@@ -87,13 +90,13 @@ Add visibility-aware filtering first; ranking expansion stays in 3B.
 
 - Memory records include `owner_agent_id` and `visibility`
 
-## Migration Plan
+## Migration Notes
 
 1. Add new columns with safe defaults.
 2. Backfill `updated_at` for existing rows.
-3. Keep existing endpoints backward-compatible for one transition window:
-   - if `agent_id` missing on reads, fallback to `shared_only=true`
-4. Remove fallback once local agents are updated.
+3. Existing read behavior remains backward-compatible:
+   - if `agent_id` is missing, reads stay unscoped (legacy behavior)
+4. Clients that require scoped reads should always provide `agent_id`.
 
 ## Test Plan
 
@@ -121,7 +124,7 @@ Add visibility-aware filtering first; ranking expansion stays in 3B.
 
 ## Exit Criteria
 
-- Two-scope model implemented and documented.
-- All memory retrieval endpoints enforce visibility semantics.
-- Promote flow working with tests.
-- Full suite green after migration and API updates.
+- Two-scope model is implemented and documented.
+- Memory retrieval endpoints enforce visibility semantics when `agent_id` is provided.
+- Promote flow is implemented with owner checks.
+- Full suite is green after migration and API updates.

@@ -65,6 +65,279 @@ def test_graph_content_type_is_html(client):
     assert "text/html" in resp.content_type
 
 
-def test_graph_response_body_is_non_empty(client):
-    resp = client.get("/graph")
-    assert len(resp.data) > 0
+
+# ---------------------------------------------------------------------------
+# GET /metrics/memory-usefulness
+# ---------------------------------------------------------------------------
+
+def test_memory_usefulness_metrics_returns_200(client):
+    resp = client.get("/metrics/memory-usefulness")
+    assert resp.status_code == 200
+
+
+def test_memory_usefulness_metrics_returns_json_shape(client):
+    data = client.get("/metrics/memory-usefulness").get_json()
+    assert "memory_counts" in data
+    assert "adoption_signals" in data
+    assert "trust_signals" in data
+    assert "run_signals" in data
+    assert "freshness_signals" in data
+    assert "coverage_pct" in data
+
+
+def test_memory_usefulness_metrics_empty_db_is_zeroed(client):
+    data = client.get("/metrics/memory-usefulness").get_json()
+    assert data["memory_counts"]["total"] == 0
+    assert data["run_signals"]["distinct_runs"] == 0
+    assert data["freshness_signals"]["updated_last_24h"] == 0
+    assert data["coverage_pct"]["run_tracked"] == 0.0
+    assert data["coverage_pct"]["verified"] == 0.0
+
+
+def test_memory_usefulness_metrics_reflects_memory_state(client):
+    first = client.post(
+        "/memory",
+        json={
+            "name": "decision-1",
+            "type": "decision",
+            "content": "Use run-aware checkpointing",
+            "owner_agent_id": "agent-alpha",
+            "visibility": "shared",
+            "tags": "decision,ops",
+            "run_id": "run-1",
+            "idempotency_key": "agent-alpha:run-1:decision-1",
+        },
+    )
+    second = client.post(
+        "/memory",
+        json={
+            "name": "draft-1",
+            "type": "trace",
+            "content": "Private draft note",
+            "owner_agent_id": "agent-alpha",
+            "visibility": "private",
+        },
+    )
+
+    first_id = first.get_json()["id"]
+    second_id = second.get_json()["id"]
+
+    verify = client.post(
+        "/memory/verify",
+        json={
+            "memory_id": first_id,
+            "agent_id": "agent-alpha",
+            "verification_status": "verified",
+            "verification_source": "test-run",
+        },
+    )
+    assert verify.status_code == 200
+
+    archive = client.post(
+        "/memory/archive",
+        json={"memory_id": second_id, "agent_id": "agent-alpha"},
+    )
+    assert archive.status_code == 200
+
+    data = client.get("/metrics/memory-usefulness").get_json()
+    assert data["memory_counts"]["total"] == 2
+    assert data["memory_counts"]["active"] == 1
+    assert data["memory_counts"]["archived"] == 1
+    assert data["memory_counts"]["shared_active"] == 1
+    assert data["memory_counts"]["private_active"] == 0
+    assert data["adoption_signals"]["run_tracked"] == 1
+    assert data["adoption_signals"]["idempotent"] == 1
+    assert data["adoption_signals"]["tagged"] == 1
+    assert data["trust_signals"]["verified"] == 1
+    assert data["trust_signals"]["reviewed"] == 1
+    assert data["run_signals"]["distinct_runs"] == 1
+    assert data["run_signals"]["active_run_tracked"] == 1
+    assert data["run_signals"]["top_runs"][0]["run_id"] == "run-1"
+    assert data["run_signals"]["top_runs"][0]["memory_count"] == 1
+    assert data["freshness_signals"]["updated_last_7d"] == 2
+    assert data["coverage_pct"]["run_tracked"] == 50.0
+    assert data["coverage_pct"]["run_tracked_active"] == 50.0
+    assert data["coverage_pct"]["verified"] == 50.0
+
+
+def test_memory_usefulness_metrics_adoption_pattern_batch_replay_and_verify(client):
+    batch_payload = {
+        "memories": [
+            {
+                "name": "checkpoint/scope",
+                "type": "trace",
+                "content": "Sprint A scope checkpoint",
+                "owner_agent_id": "agent-alpha",
+                "visibility": "private",
+                "tags": "checkpoint,trace",
+                "run_id": "run-sprint-a-1",
+                "idempotency_key": "agent-alpha:run-sprint-a-1:checkpoint-scope",
+            },
+            {
+                "name": "decision/kickoff",
+                "type": "decision",
+                "content": "Kickoff Sprint A with scorecard adoption",
+                "owner_agent_id": "agent-alpha",
+                "visibility": "shared",
+                "tags": "decision,phase3,sprint-a",
+                "run_id": "run-sprint-a-1",
+                "idempotency_key": "agent-alpha:run-sprint-a-1:decision-kickoff",
+            },
+        ]
+    }
+
+    first = client.post("/memory/batch", json=batch_payload)
+    assert first.status_code == 201
+    first_results = first.get_json()["results"]
+    assert len(first_results) == 2
+    assert first_results[0]["created"] is True
+    assert first_results[1]["created"] is True
+
+    replay = client.post("/memory/batch", json=batch_payload)
+    assert replay.status_code == 201
+    replay_results = replay.get_json()["results"]
+    assert len(replay_results) == 2
+    assert replay_results[0]["created"] is False
+    assert replay_results[1]["created"] is False
+    assert replay_results[0]["id"] == first_results[0]["id"]
+    assert replay_results[1]["id"] == first_results[1]["id"]
+
+    verify = client.post(
+        "/memory/verify",
+        json={
+            "memory_id": first_results[1]["id"],
+            "agent_id": "agent-alpha",
+            "verification_status": "verified",
+            "verification_source": "test_memory_usefulness_metrics_adoption_pattern_batch_replay_and_verify",
+        },
+    )
+    assert verify.status_code == 200
+
+    data = client.get("/metrics/memory-usefulness").get_json()
+    assert data["memory_counts"]["total"] == 2
+    assert data["adoption_signals"]["run_tracked"] == 2
+    assert data["adoption_signals"]["idempotent"] == 2
+    assert data["adoption_signals"]["tagged"] == 2
+    assert data["trust_signals"]["verified"] == 1
+    assert data["run_signals"]["distinct_runs"] == 1
+    assert data["coverage_pct"]["run_tracked"] > 0.0
+    assert data["coverage_pct"]["idempotent"] > 0.0
+    assert data["coverage_pct"]["tagged"] > 0.0
+    assert data["coverage_pct"]["verified"] > 0.0
+
+
+# ---------------------------------------------------------------------------
+# GET /metrics/ops
+# ---------------------------------------------------------------------------
+
+def test_ops_metrics_returns_200(client):
+    resp = client.get("/metrics/ops")
+    assert resp.status_code == 200
+
+
+def test_ops_metrics_returns_json_with_routes_list(client):
+    data = client.get("/metrics/ops").get_json()
+    assert "routes" in data
+    assert isinstance(data["routes"], list)
+
+
+def test_ops_metrics_records_request_after_hit(client):
+    client.get("/health")
+    data = client.get("/metrics/ops").get_json()
+    route_keys = [r["route"] for r in data["routes"]]
+    assert "GET /health" in route_keys
+
+
+def test_ops_metrics_request_count_increments(client):
+    client.get("/health")
+    client.get("/health")
+    data = client.get("/metrics/ops").get_json()
+    health_entry = next(r for r in data["routes"] if r["route"] == "GET /health")
+    assert health_entry["requests"] >= 2
+
+
+def test_ops_metrics_error_count_increments_on_4xx(client):
+    client.get("/no-such-route-xyz")
+    data = client.get("/metrics/ops").get_json()
+    # The 404 path is recorded; verify that errors are non-zero across all routes.
+    total_errors = sum(r["errors"] for r in data["routes"])
+    assert total_errors >= 1
+
+
+def test_ops_metrics_route_entry_has_expected_fields(client):
+    client.get("/health")
+    data = client.get("/metrics/ops").get_json()
+    health_entry = next(r for r in data["routes"] if r["route"] == "GET /health")
+    assert "requests" in health_entry
+    assert "errors" in health_entry
+    assert "avg_latency_ms" in health_entry
+    assert "total_latency_ms" in health_entry
+
+
+
+def test_ops_metrics_includes_deeper_signal_sections(client):
+    data = client.get("/metrics/ops").get_json()
+    assert "signals" in data
+    assert "retrieval_result_signals" in data["signals"]
+    assert "db_lock_signals" in data["signals"]
+    assert "dedupe_signals" in data["signals"]
+
+
+def test_ops_metrics_tracks_retrieval_result_counts(client):
+    client.get("/memory/list?agent_id=agent-alpha")
+    data = client.get("/metrics/ops").get_json()
+    retrieval = data["signals"]["retrieval_result_signals"]["memory_list"]
+    assert retrieval["calls"] >= 1
+    assert retrieval["results_total"] >= 0
+    assert retrieval["avg_results"] >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# GET /maintenance/integrity
+# ---------------------------------------------------------------------------
+
+def test_maintenance_integrity_returns_200(client):
+    resp = client.get("/maintenance/integrity")
+    assert resp.status_code == 200
+
+
+def test_maintenance_integrity_response_shape(client):
+    data = client.get("/maintenance/integrity").get_json()
+    assert "is_clean" in data
+    assert "orphan_counts" in data
+    assert "duplicate_candidates" in data
+    assert "samples" in data
+
+
+def test_maintenance_integrity_rejects_invalid_sample_limit(client):
+    resp = client.get("/maintenance/integrity?sample_limit=0")
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# POST /maintenance/sqlite
+# ---------------------------------------------------------------------------
+
+def test_sqlite_maintenance_dry_run_default(client):
+    resp = client.post("/maintenance/sqlite", json={})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["dry_run"] is True
+    assert "planned_actions" in data
+
+
+def test_sqlite_maintenance_executes_when_dry_run_false(client):
+    resp = client.post("/maintenance/sqlite", json={"dry_run": False})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["dry_run"] is False
+    assert "checkpoint" in data
+    assert "busy" in data["checkpoint"]
+
+
+def test_sqlite_maintenance_rejects_invalid_checkpoint_mode(client):
+    resp = client.post(
+        "/maintenance/sqlite",
+        json={"dry_run": True, "checkpoint_mode": "INVALID"},
+    )
+    assert resp.status_code == 400

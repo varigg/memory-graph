@@ -1,33 +1,15 @@
 from flask import Blueprint, jsonify, request
 
-from db_operations import (
+from blueprints._params import parse_limit_offset
+from db_utils import get_db
+from storage.conversation_repository import (
     compute_importance,
     fts_search_conversations,
     insert_conversation,
-    insert_embedding,
 )
-from db_utils import get_db
+from storage.embedding_repository import insert_embedding
 
 bp = Blueprint("conversations", __name__)
-
-_DEFAULT_LIMIT = 20
-_MAX_LIMIT = 100
-
-
-def _parse_limit_offset():
-    raw_limit = request.args.get("limit")
-    raw_offset = request.args.get("offset")
-    try:
-        limit = int(raw_limit) if raw_limit is not None else _DEFAULT_LIMIT
-        offset = int(raw_offset) if raw_offset is not None else 0
-    except ValueError:
-        return None, None, jsonify({"error": "limit and offset must be integers"}), 400
-    if limit <= 0:
-        return None, None, jsonify({"error": "limit must be a positive integer"}), 400
-    if offset < 0:
-        return None, None, jsonify({"error": "offset must be a non-negative integer"}), 400
-    return min(limit, _MAX_LIMIT), offset, None, None
-
 
 @bp.route("/log", methods=["POST"])
 def log_conversation():
@@ -59,7 +41,7 @@ def log_conversation():
 
 @bp.route("/recent", methods=["GET"])
 def recent():
-    limit, offset, err_resp, err_status = _parse_limit_offset()
+    limit, offset, err_resp, err_status = parse_limit_offset()
     if err_resp is not None:
         return err_resp, err_status
     db = get_db()
@@ -79,19 +61,17 @@ def search():
     cleaned_q = q.strip()
     if not cleaned_q:
         return jsonify({"error": "q parameter must be non-empty"}), 400
-    limit, offset, err_resp, err_status = _parse_limit_offset()
+    limit, offset, err_resp, err_status = parse_limit_offset()
     if err_resp is not None:
         return err_resp, err_status
     db = get_db()
-    try:
-        results = fts_search_conversations(
-            db,
-            cleaned_q.replace('"', ''),
-            limit=limit,
-            offset=offset,
-        )
-    except Exception:
-        results = []
+    safe_q = cleaned_q.replace('"', '')
+    results = fts_search_conversations(
+        db,
+        f'"{safe_q}"',
+        limit=limit,
+        offset=offset,
+    )
     return jsonify(results)
 
 

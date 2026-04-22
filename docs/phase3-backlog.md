@@ -1,20 +1,29 @@
-# Phase 3 Backlog — Ticket-Ready Plan
+# Phase 3 Backlog — Active Ticket-Ready Plan
 
-This backlog converts the Phase 3 minimum deliverables into implementable work
-items for the target deployment profile:
+This is the active detailed backlog for remaining Phase 3-style work.
+
+Use this file when work is too detailed for `docs/roadmap.md` but should still
+be part of the current planning surface.
+
+Deployment assumptions retained from the original Phase 3 framing:
 
 - local-only
 - <= 12 agents
 - low concurrency
 - no authentication
 
-Related implementation breakdown:
-
-- `docs/phase3a-pr-chunks.md`
+Historical implementation breakdowns such as `docs/phase3a-pr-chunks.md` are
+retained for reference only and are not active planning documents.
 
 ## Milestone M1 — Phase 3A Core (Required)
 
+Current status note:
+
+- M1 is complete (2026-04-21).
+
 ### P3A-1 Schema: ownership + visibility columns
+
+- **Status**: Implemented
 
 - **Priority**: P0
 - **Depends on**: none
@@ -30,6 +39,8 @@ Related implementation breakdown:
 
 ### P3A-2 API: scoped write semantics
 
+- **Status**: Implemented
+
 - **Priority**: P0
 - **Depends on**: P3A-1
 - **Scope**:
@@ -41,6 +52,8 @@ Related implementation breakdown:
   - invalid payloads return `400` with clear errors
 
 ### P3A-3 API: scoped read semantics
+
+- **Status**: Implemented
 
 - **Priority**: P0
 - **Depends on**: P3A-1
@@ -55,6 +68,8 @@ Related implementation breakdown:
 
 ### P3A-4 API: promote-to-shared flow
 
+- **Status**: Implemented
+
 - **Priority**: P1
 - **Depends on**: P3A-1, P3A-3
 - **Scope**:
@@ -66,6 +81,8 @@ Related implementation breakdown:
   - non-owner promotion rejected (`403` or `404` per chosen policy)
 
 ### P3A-5 Test coverage + docs refresh
+
+- **Status**: Implemented
 
 - **Priority**: P0
 - **Depends on**: P3A-2, P3A-3, P3A-4
@@ -79,7 +96,23 @@ Related implementation breakdown:
 
 ## Milestone M2 — Phase 3B Minimum Slice (Partially Required)
 
+Current status note:
+
+- The repository is ahead of this original minimum slice in a few areas.
+- Retrieval controls now also include `run_id`, `tag`, `min_confidence`,
+  `updated_since`, and `recency_half_life_hours`.
+- Typed metadata support is implemented for both storage (`metadata`) and
+  retrieval (`metadata_key`, `metadata_value`, `metadata_value_type`).
+- Memory list/search/recall responses now include parsed `metadata` in
+  addition to raw `metadata_json` for client compatibility and ergonomics.
+- Lifecycle support now includes merge/supersede operations and verification
+  state updates in addition to archive/invalidate.
+- Batch write support (`POST /memory/batch`) is implemented even though earlier
+  planning treated bulk mutation APIs as deferrable.
+
 ### P3B-1 Retrieval filters (visibility/owner/status)
+
+- **Status**: Implemented and exceeded
 
 - **Priority**: P1
 - **Depends on**: M1
@@ -94,6 +127,8 @@ Related implementation breakdown:
 
 ### P3B-2 Archive/invalidate lifecycle endpoints
 
+- **Status**: Implemented and exceeded
+
 - **Priority**: P1
 - **Depends on**: M1
 - **Scope**:
@@ -105,6 +140,8 @@ Related implementation breakdown:
   - archived/invalidated records obey retrieval filters
 
 ### P3B-3 Lightweight ranking enhancement
+
+- **Status**: Implemented minimum slice and extended
 
 - **Priority**: P2
 - **Depends on**: P3B-1
@@ -119,6 +156,8 @@ Related implementation breakdown:
 
 ### P3C-1 Request correlation id
 
+- **Status**: Initial slice implemented
+
 - **Priority**: P2
 - **Depends on**: none
 - **Scope**:
@@ -129,16 +168,21 @@ Related implementation breakdown:
 
 ### P3C-2 Basic service metrics
 
+- **Status**: Implemented
+
 - **Priority**: P2
 - **Depends on**: none
 - **Scope**:
   - endpoint latency and error counters
   - memory-scope usage counters (shared vs private)
+  - memory usefulness scorecard for adoption/trust coverage
 - **Acceptance criteria**:
   - metrics endpoint or log summaries documented
   - smoke tests verify instrumentation paths
 
 ### P3C-3 Stale private memory cleanup job
+
+- **Status**: Implemented (Sprint B complete; 2026-04-21)
 
 - **Priority**: P2
 - **Depends on**: M1
@@ -149,20 +193,64 @@ Related implementation breakdown:
   - cleanup respects visibility and retention config
   - integration test verifies expected removals
 
+### P3C-4 Additional operational maintenance follow-ons
+
+- **Status**: Implemented (Sprint C complete; 2026-04-21)
+
+- **Priority**: P3
+- **Depends on**: P3C-2
+- **Scope**:
+  - optional integrity checks for orphan references and duplicate candidates
+  - optional SQLite maintenance helpers where they solve a concrete local issue
+  - deeper metrics for lock retries, retrieval result counts, and dedupe behavior if current visibility proves insufficient
+- **Acceptance criteria**:
+  - each addition has a concrete operational use case rather than being added speculatively
+  - docs identify which checks are advisory versus destructive
+  - tests cover any maintenance action that mutates state
+
 ## Deferred Items (Not Needed Now)
 
 - async queue architecture for embedding/enrichment
-- bulk mutation APIs
 - cursor pagination migration
-- merge/supersede automation
 - enterprise auth/tenant controls
+- ranking explainability fields in search results (`rank_components`, `match_reasons`)
+- formal verifier evidence model beyond the current verification status fields
+
+## Implemented Beyond Original Backlog Text
+
+These items were originally absent from the backlog or described as future work,
+but are now present in the codebase:
+
+- `POST /memory/batch` for grouped writes
+- write idempotency via `idempotency_key`
+- retrieval filters for `run_id`, `tag`, `min_confidence`, `updated_since`, and
+  `recency_half_life_hours`
+- typed metadata write support (`metadata`) and typed metadata read filters
+  (`metadata_key`, `metadata_value`, `metadata_value_type`)
+- parsed metadata response field (`metadata`) alongside `metadata_json` in
+  memory list/search/recall results
+- verification state updates via `POST /memory/verify`
+- merge/supersede lifecycle operations
+- stale private cleanup via `POST /memory/cleanup-private` with retention-driven
+  targeting, dry-run support, owner/status filtering, and deletion summaries
+- restart-safe autonomous-agent operating guidance in `docs/agent-memory-ops.md`
 
 ## Suggested Sprint Order
 
-1. Sprint A: P3A-1, P3A-2, P3A-3
-2. Sprint B: P3A-4, P3A-5, P3B-1
-3. Sprint C: P3B-2, P3B-3, P3C-1
-4. Sprint D: P3C-2, P3C-3
+1. Sprint A: operational adoption of memory signals so the usefulness scorecard becomes meaningful in real workflows (complete; 2026-04-21)
+   - See `docs/plans/sprint-a-memory-signal-adoption.md` for implementation plan
+2. Sprint B: P3C-3 stale private memory cleanup (complete; 2026-04-21)
+
+- See `docs/plans/sprint-b-stale-private-memory-cleanup.md` for implementation details and validation
+
+3. Sprint C: P3C-4 additional operational maintenance follow-ons (complete; 2026-04-21)
+
+- Completed: integrity checks endpoint, SQLite maintenance helper, deeper ops signals (retrieval/db-lock/dedupe)
+
+Phase 3 closure note:
+
+- Phase 3 is complete after Sprint C.
+- Harness-bridge primitives are not Phase 3 backlog items and should be scoped under Phase 4 planning.
 
 ## Definition of Done (Phase 3 minimum)
 
@@ -170,3 +258,12 @@ Related implementation breakdown:
 - M2 complete for P3B-1 and P3B-2 at minimum
 - M3 complete for P3C-1 and P3C-2 at minimum
 - documentation updated and full suite green
+
+Current interpretation:
+
+- M1 is complete.
+- M2 is complete and exceeded.
+- M3 is complete: request correlation (P3C-1) and route-level latency/error
+  counters (P3C-2) are both implemented. P3C-3 stale private cleanup is now
+  implemented.
+- Phase 3 is complete; remaining harness-goal/autonomy bridge work is Phase 4+.

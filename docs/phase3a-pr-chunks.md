@@ -1,7 +1,10 @@
-# Phase 3A PR Chunks — Implementation Plan
+# Phase 3A PR Chunks — Historical Implementation Plan
 
-This document decomposes Phase 3A into reviewable PRs with concrete schema/API
-contracts for local trusted multi-agent usage.
+This document is retained as a historical record of how the Phase 3A rollout
+was originally decomposed into reviewable PRs.
+
+It is no longer an active plan. For current planning, use `docs/roadmap.md`
+and `docs/phase3-backlog.md`.
 
 Assumptions:
 

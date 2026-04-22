@@ -1,0 +1,126 @@
+# Roadmap
+
+This is the canonical living feature tracker for the repository.
+
+Use this file when you want the current state of the project in one place:
+
+- what major feature areas exist
+- what is implemented vs planned
+- which document is authoritative for details
+- what should happen next
+
+## How This Relates To Other Docs
+
+- `plan-memoryGraphFlaskApi.prompt.md` is the original feature/spec prompt.
+- `docs/architecture.md` is the current architecture narrative and system-boundary document.
+- `docs/adr/README.md` is the index of durable architecture decision records.
+- `docs/phase1-2-consolidated.md` is the retrospective summary of early review and implementation work.
+- `docs/phase3-consolidated.md` is the consolidated retrospective summary of Phase 3 implementation, rationale, and decisions.
+- `docs/phase3-backlog.md` is the detailed Phase 3 task breakdown.
+- `docs/conversation-outcomes.md` records major discussion outcomes and rationale.
+- `harness.md` is the target-state autonomous-agent vision.
+
+If those documents disagree, treat current code and `README.md` as authoritative,
+then update this roadmap and the stale doc.
+
+## Status Legend
+
+- Implemented
+- In progress
+- Planned
+- Deferred
+
+## Feature Matrix
+
+| Feature Area                                   | Status               | Scope Summary                                                                                                                                                    | Primary Source of Truth                                                                            | Implemented Surface                                                                                                                                                                                                              | Next Step                                                                                                                             |
+| ---------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Core Flask service foundation                  | Implemented          | App factory, SQLite init, blueprints, JSON error handling, CORS, local-first runtime                                                                             | `README.md`, `docs/phase1-2-consolidated.md`                                                       | `api_server.py`, `config.py`, `db_schema.py`, `blueprints/*`                                                                                                                                                                     | Maintain as baseline; no structural gap                                                                                               |
+| Conversations                                  | Implemented          | Log, recent retrieval, FTS search, stats                                                                                                                         | `README.md`, `docs/phase1-2-consolidated.md`                                                       | `/conversation/log`, `/conversation/recent`, `/conversation/search`, `/conversation/stats`                                                                                                                                       | Add correlation IDs if ops tracing becomes necessary                                                                                  |
+| Memory CRUD and scoped access                  | Implemented          | Memory create/list/search/recall/delete with shared/private scope semantics                                                                                      | `README.md`, `docs/phase3a.md`                                                                     | `/memory`, `/memory/list`, `/memory/recall`, `/memory/search`, `/memory/<id>`, `/memory/<id>/promote`                                                                                                                            | Keep docs and tests aligned with current API                                                                                          |
+| Memory lifecycle operations                    | Implemented          | Archive, invalidate, merge, supersede, promote, verification status updates                                                                                      | `README.md`, `docs/phase3-backlog.md`                                                              | `/memory/archive`, `/memory/invalidate`, `/memory/merge`, `/memory/supersede`, `/memory/verify`                                                                                                                                  | Keep the current model unless harness v2 proves a concrete verification gap                                                           |
+| Autonomous-session write discipline            | Implemented          | Batch write, idempotency, run tracking, tags, restart-safe checkpoint conventions                                                                                | `docs/agent-memory-ops.md`, `.github/copilot-instructions.md`                                      | `/memory/batch`, `idempotency_key`, `run_id`, `tags`                                                                                                                                                                             | Increase real usage so usefulness metrics become informative                                                                          |
+| Retrieval quality controls                     | Implemented          | Visibility/owner/status filters plus `run_id`, `tag`, `min_confidence`, `updated_since`, `recency_half_life_hours`, and typed metadata filters                   | `README.md`, `docs/phase3-backlog.md`                                                              | memory list/search/recall query params                                                                                                                                                                                           | Monitor ranking quality as filter combinations expand                                                                                 |
+| Semantic and hybrid search                     | Implemented          | Embedding-backed semantic search plus hybrid RRF retrieval                                                                                                       | `README.md`, `docs/phase1-2-consolidated.md`                                                       | `/search/semantic`, `/search/hybrid`, `/embeddings/stats`, `/embeddings/reindex`                                                                                                                                                 | Consider async enrichment if request-path latency becomes a problem                                                                   |
+| Embedding correctness and dedup                | Implemented          | Reindex updates FKs, dedups duplicate text, repairs legacy rows, unique text index                                                                               | `docs/phase1-2-consolidated.md`                                                                    | `db_schema.py`, `storage/embedding_repository.py`, `/embeddings/reindex`                                                                                                                                                         | Monitor only; no urgent gap                                                                                                           |
+| Entity and KV support                          | Implemented          | Basic entity insert/search and KV reads/writes                                                                                                                   | `README.md`                                                                                        | `/entity`, `/entity/search`, `/kv/<key>`                                                                                                                                                                                         | Expand only if harness or UI starts depending on richer state                                                                         |
+| Web UI                                         | Implemented baseline | D3-based local UI for graph/log/rag/crons navigation                                                                                                             | `README.md`, `docs/phase1-2-consolidated.md`                                                       | `/graph`, `static/index.html`                                                                                                                                                                                                    | Accessibility and browser hardening remain deferred                                                                                   |
+| Documentation hub and outcomes tracking        | Implemented          | README as doc hub, outcomes ledger, roadmap, consolidated summaries                                                                                              | `README.md`, `docs/conversation-outcomes.md`, `docs/roadmap.md`                                    | repo docs                                                                                                                                                                                                                        | Keep this roadmap current when features shift                                                                                         |
+| Architecture narrative and ADRs                | Implemented          | Current-state architecture document plus ADRs for durable system-boundary decisions                                                                              | `docs/architecture.md`, `docs/adr/README.md`                                                       | architecture overview and ADR index/records                                                                                                                                                                                      | Add new ADRs only for durable structural decisions                                                                                    |
+| Operational adoption of memory signals         | Implemented          | Drive consistent real-world use of `run_id`, `idempotency_key`, `tags`, and verification updates so memory usefulness metrics reflect actual workflow behavior   | `docs/plans/sprint-a-memory-signal-adoption.md`, `docs/agent-memory-ops.md`, `README.md`           | Sprint A complete (2026-04-21): signal patterns documented, worked examples in copilot-instructions and README, scorecard adoption test in test_utility.py, full suite 421 passed                                                | Sprint A delivered; signal patterns are established and scorecard is meaningful — continue with Sprint B stale private memory cleanup |
+| Memory usefulness observability                | Implemented          | Current-state counts, adoption/trust coverage, run-level signals, and freshness signals                                                                          | `README.md`, `docs/phase3-backlog.md`                                                              | `/metrics/memory-usefulness`                                                                                                                                                                                                     | Keep scorecards lightweight unless harness v2 operations demonstrate a concrete need for persisted history                            |
+| Request correlation and broader ops visibility | Implemented          | Request IDs in response headers plus correlation IDs in global error payloads and request logging; route-level request/error/latency counters via `/metrics/ops` | `README.md`, `docs/phase3-backlog.md`                                                              | global `X-Request-Id` propagation, request-id-aware global error responses, `/metrics/ops` per-route counters                                                                                                                    | Keep counters ephemeral unless local operations prove restart-persistent history is necessary                                         |
+| Structured search error semantics              | Implemented          | Remove broad exception swallowing in retrieval endpoints so failures propagate to the global 500 handler and return observable error responses                   | `blueprints/conversations.py`, `blueprints/memory.py`                                              | bare propagation to Flask global error handler on all FTS and search paths                                                                                                                                                       | Done; revisit if per-error-type handling becomes necessary                                                                            |
+| Service-layer domain boundaries                | Implemented          | Blueprints are thin HTTP adapters while repositories and services own SQL, lifecycle, write, retrieval, and hybrid-ranking concerns                              | `docs/refactor-service-layer.md`, `docs/architecture.md`                                           | `blueprints/_params.py`, `storage/*`, `services/*`, thin adapters in `blueprints/*`                                                                                                                                              | Keep new boundaries enforced; add targeted unit tests around service modules                                                          |
+| Stale private memory cleanup                   | Implemented          | Cleanup command/job with dry-run and summary                                                                                                                     | `docs/plans/sprint-b-stale-private-memory-cleanup.md`, `docs/phase3-backlog.md`, `README.md`       | Sprint B complete (2026-04-21): `POST /memory/cleanup-private` implemented with retention-days, dry-run mode, owner/status filters, and deletion summary; integration tests added and full suite passed (426 passed, 14 skipped) | Completed; continue normal maintenance and only add follow-ons with concrete local ops value                                          |
+| Operational maintenance follow-ons (P3C-4)     | Implemented          | Integrity checks, SQLite maintenance helper, and deeper operational signals                                                                                      | `docs/plans/sprint-c-operational-maintenance-follow-ons.md`, `docs/phase3-backlog.md`, `README.md` | Sprint C complete (2026-04-21): `GET /maintenance/integrity`, `POST /maintenance/sqlite`, and extended `GET /metrics/ops` signals for retrieval results, DB lock events, and dedupe indicators                                   | Phase 3 complete; route future harness primitives through Phase 4 planning                                                            |
+| Typed metadata filtering                       | Implemented          | JSON metadata write support, server-side typed metadata filtering, and parsed metadata response fields across list/search/recall                                 | `README.md`, `docs/phase3-backlog.md`, `tests/test_memory.py`                                      | `metadata_json` persistence + `metadata_key`/`metadata_value`/`metadata_value_type` filters + `metadata` parsed response field                                                                                                   | Extend typed metadata filtering coverage to hybrid/semantic search only if required                                                   |
+| Full harness runtime                           | Deferred             | Goal engine, plan trees, world model, experiments, metrics engine, skill compiler, autonomy ladder runtime                                                       | `harness.md`                                                                                       | not implemented                                                                                                                                                                                                                  | Decide whether to grow this repo into the harness backend or keep it as the memory substrate                                          |
+
+## Phase 3 Priorities (Current)
+
+1. Keep the implemented API, architecture docs, and ADRs synchronized.
+2. Sprint A complete (2026-04-21).
+3. Sprint B complete (2026-04-21): stale private memory cleanup job with dry-run mode and deletion summary (P3C-3).
+4. Sprint C complete (2026-04-21): P3C-4 operational maintenance follow-ons implemented.
+5. Phase 3 is complete; future harness-bridge work is explicitly post-Phase-3 scope.
+
+## Future Planned Work
+
+Pydantic validation at the service boundary is implemented for memory write and lifecycle payloads using typed request models in `services/memory_write_service.py` and `services/memory_request_models.py`.
+
+The shortest defensible path to harness v2 is to finish the substrate work that the harness will depend on, then add only the minimum bridge primitives needed for the first real integration.
+
+The next planned feature is transactional write guarantees:
+
+- atomic multi-row operations for batch and lifecycle flows
+
+Primary planning document for item 1:
+
+- `docs/plans/transactional-write-guarantees.md`
+
+Transactional write guarantees are **implemented** (2026-04-21). `write_transaction` context manager
+added to `db_utils.py`; `insert_memory` and `delete_memories_by_ids` no longer auto-commit;
+batch orchestration moved into a service-owned transaction; lifecycle service migrated onto the
+same pattern. All 437 tests pass.
+
+Explicit retrieval profiles are **implemented** (2026-04-22). `profile=general|autonomous` is now
+supported on `/memory/list`, `/memory/recall`, and `/memory/search`; autonomous defaults are
+applied when omitted by caller (`status=active`, `min_confidence=0.7`,
+`recency_half_life_hours=168`), explicit query params still override profile defaults, and
+`profile=autonomous` requires `agent_id`.
+
+Recommended implementation order after Phase 3:
+
+1. ~~Transactional write guarantees~~ **Implemented** (2026-04-21) — `write_transaction` context manager, composable repository helpers, atomic batch and lifecycle flows. See `docs/plans/transactional-write-guarantees.md`.
+2. ~~Explicit retrieval profiles~~ **Implemented** (2026-04-22) — profile defaults and guardrails for memory read endpoints. See `docs/plans/explicit-retrieval-profiles.md`.
+3. Minimal harness bridge primitives (goal/action-log/autonomy-checkpoint surfaces) once retrieval and write invariants are stable
+
+The next planned item is **minimal harness bridge primitives**.
+
+Primary planning document for item 2:
+
+- `docs/plans/explicit-retrieval-profiles.md`
+
+Primary planning document for item 3:
+
+- `docs/plans/harness-v2-bridge-primitives.md`
+
+Additional future work, only when justified by concrete local need or by an explicit harness v2 integration requirement:
+
+- richer verifier evidence model (explicit evidence records beyond status/source)
+- targeted owner-check hardening on mutating routes where current caller-supplied ownership is too weak
+- SQLite runtime hardening (connection pragmas and local-concurrency safeguards)
+- persisted ops history or task-run trend storage if in-memory local metrics stop being sufficient
+- autonomous decision event ledger if the bridge primitives are not enough for harness auditability
+- memory request model parser cleanup: deduplicate repeated validation-error mapping in `services/memory_request_models.py` while preserving current request/response behavior and error messages
+- full harness runtime only if this repository is intentionally expanded beyond the memory substrate role
+
+This ordering is intentionally biased toward reaching harness v2 quickly without turning Memory Graph into the full harness runtime described in `harness.md`.
+
+Future work should be planned using feature-specific implementation plans rather than consolidated phase documents.
+
+## Maintenance Rules
+
+1. **During Phase 3**: When a Phase 3 feature changes status, update this file in the same change set as the code or documentation change that caused the status change.
+2. **Post-Phase-3 planning**: Once Phase 3 is complete, scope subsequent work through feature-specific implementation plans rather than a new phase umbrella.
+3. **Implementation plans**: For each post-Phase-3 feature, create a feature-specific implementation plan. Store implementation plans in `docs/plans/` with the naming convention `<feature-name>.md`.

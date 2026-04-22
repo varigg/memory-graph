@@ -31,7 +31,14 @@ CREATE TABLE IF NOT EXISTS memories (
     content     TEXT,
     description TEXT,
     timestamp   DATETIME DEFAULT CURRENT_TIMESTAMP,
-    confidence  REAL DEFAULT 1.0
+    confidence  REAL DEFAULT 1.0,
+    tags        TEXT DEFAULT '',
+    run_id      TEXT,
+    idempotency_key TEXT,
+    metadata_json TEXT DEFAULT '{}',
+    verification_status TEXT DEFAULT 'unverified' CHECK (verification_status IN ('unverified', 'verified', 'disputed')),
+    verification_source TEXT,
+    verified_at DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS entities (
@@ -63,6 +70,18 @@ CREATE TABLE IF NOT EXISTS kv_store (
     key        TEXT PRIMARY KEY,
     value      TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS memory_relations (
+    id               INTEGER PRIMARY KEY,
+    source_memory_id INTEGER NOT NULL,
+    target_memory_id INTEGER NOT NULL,
+    relation_type    TEXT NOT NULL CHECK (relation_type IN ('merged_into', 'superseded_by')),
+    actor_agent_id   TEXT NOT NULL,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_memory_id, target_memory_id, relation_type),
+    FOREIGN KEY(source_memory_id) REFERENCES memories(id) ON DELETE CASCADE,
+    FOREIGN KEY(target_memory_id) REFERENCES memories(id) ON DELETE CASCADE
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS fts_conversations
@@ -169,6 +188,61 @@ def _ensure_memories_scope_columns(conn: sqlite3.Connection) -> None:
             "ADD COLUMN updated_at DATETIME"
         )
 
+    if "status" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN status TEXT NOT NULL DEFAULT 'active' "
+            "CHECK (status IN ('active', 'archived', 'invalidated'))"
+        )
+
+    if "status_updated_at" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN status_updated_at DATETIME"
+        )
+
+    if "tags" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN tags TEXT DEFAULT ''"
+        )
+
+    if "run_id" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN run_id TEXT"
+        )
+
+    if "idempotency_key" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN idempotency_key TEXT"
+        )
+
+    if "metadata_json" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN metadata_json TEXT DEFAULT '{}'"
+        )
+
+    if "verification_status" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN verification_status TEXT DEFAULT 'unverified'"
+        )
+
+    if "verification_source" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN verification_source TEXT"
+        )
+
+    if "verified_at" not in cols:
+        conn.execute(
+            "ALTER TABLE memories "
+            "ADD COLUMN verified_at DATETIME"
+        )
+
     conn.execute(
         "UPDATE memories "
         "SET owner_agent_id = COALESCE(NULLIF(TRIM(owner_agent_id), ''), 'unknown')"
@@ -180,6 +254,33 @@ def _ensure_memories_scope_columns(conn: sqlite3.Connection) -> None:
     conn.execute(
         "UPDATE memories "
         "SET updated_at = COALESCE(updated_at, timestamp, CURRENT_TIMESTAMP)"
+    )
+    conn.execute(
+        "UPDATE memories "
+        "SET status = CASE "
+        "WHEN status IN ('active', 'archived', 'invalidated') THEN status "
+        "ELSE 'active' END"
+    )
+    conn.execute(
+        "UPDATE memories "
+        "SET status_updated_at = COALESCE(status_updated_at, updated_at, timestamp, CURRENT_TIMESTAMP)"
+    )
+    conn.execute(
+        "UPDATE memories "
+        "SET tags = COALESCE(tags, '')"
+    )
+    conn.execute(
+        "UPDATE memories "
+        "SET verification_status = CASE "
+        "WHEN verification_status IN ('unverified', 'verified', 'disputed') THEN verification_status "
+        "ELSE 'unverified' END"
+    )
+    conn.execute(
+        "UPDATE memories "
+        "SET metadata_json = CASE "
+        "WHEN metadata_json IS NULL OR TRIM(metadata_json) = '' THEN '{}' "
+        "WHEN json_valid(metadata_json) = 1 THEN metadata_json "
+        "ELSE '{}' END"
     )
 
 
@@ -199,6 +300,35 @@ def init(db_path: str) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_memories_updated_at "
         "ON memories(updated_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memories_status "
+        "ON memories(status)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memories_status_updated_at "
+        "ON memories(status_updated_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memories_run_id "
+        "ON memories(run_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memories_confidence "
+        "ON memories(confidence)"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_owner_idempotency "
+        "ON memories(owner_agent_id, idempotency_key) "
+        "WHERE idempotency_key IS NOT NULL"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_relations_source "
+        "ON memory_relations(source_memory_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_relations_target "
+        "ON memory_relations(target_memory_id)"
     )
     conn.executemany(
         "INSERT OR IGNORE INTO importance_keywords (keyword, score) VALUES (?, ?)",

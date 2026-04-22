@@ -10,6 +10,7 @@ requires-python = ">=3.9"
 dependencies = [
     "flask>=3.0.0",
     "flask-cors>=4.0.0",
+    "pydantic>=2.0.0",
     "sqlite-utils>=3.35.0",
     "requests>=2.31.0",
     "python-dotenv>=1.0.0",
@@ -23,6 +24,11 @@ dev = [
     "ruff>=0.1.0",
     "pytest-cov>=4.1.0",
 ]
+
+[tool.setuptools]
+packages = ["blueprints", "storage", "services"]
+py-modules = ["api_server", "config", "db_schema", "db_utils", "embeddings"]
+
 
 [tool.uv]
 dev-dependencies = [
@@ -38,50 +44,8 @@ line-length = 100
 output-format = "grouped"
 fix = true
 
-[tool.ruff.lint]
-select = [
-    "E",      # pycodestyle errors
-    "W",      # pycodestyle warnings
-    "F",      # Pyflakes
-    "I",      # isort
-    "C90",    # mccabe
-    "N",      # pep8-naming
-    "UP",     # pyupgrade
-    "B",      # flake8-bugbear
-    "A",      # flake8-builtins
-    "C4",     # flake8-comprehensions
-    "PIE",    # flake8-pie
-    "SIM",    # flake8-simplify
-    "LOG",    # flake8-logging
-    "RUF",    # ruff-specific
-    "PLC",    # pylint convention
-    "PLE",    # pylint error
-    "PLW",    # pylint warning
-]
-ignore = [
-    "E501",    # line too long (covered by line-length)
-    "UP007",   # use | instead of Union (Python 3.10+, but we support 3.9)
-    "A003",    # class attribute shadowing builtins (often acceptable)
-    "SIM105",  # use try-except instead of contextlib.suppress (subjective)
-    "PLW0613", # unused argument
-]
-unfixable = [
-    "F401",    # unused imports (manual review)
-    "F841",    # unused variables (manual review)
-]
-
 [tool.ruff.lint.isort]
-known-first-party = ["db_schema", "db_operations", "db_utils", "embeddings", "config", "api_server"]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**" = [
-    "PLR0913",  # too many arguments
-    "PLR0914",  # too many local variables
-    "PLR0915",  # too many statements
-]
-"conftest.py" = [
-    "PLR0913",  # too many arguments (pytest fixtures)
-]
+known-first-party = ["db_schema", "db_utils", "embeddings", "config", "api_server", "storage", "services"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -85,6 +85,38 @@ def test_create_memory_returns_400_when_visibility_invalid(client):
     assert resp.status_code == 400
 
 
+def test_create_memory_idempotency_key_replays_existing_row(client):
+    payload = _memory_payload(idempotency_key="mem-unique-1")
+    first = client.post("/memory", json=payload)
+    second = client.post("/memory", json=payload)
+
+    assert first.status_code == 201
+    assert second.status_code == 200
+    assert first.get_json()["id"] == second.get_json()["id"]
+    assert second.get_json()["idempotent_replay"] is True
+
+
+def test_create_memory_accepts_metadata_object(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(metadata={"priority": "high", "attempt": 2, "urgent": True}),
+    )
+    assert resp.status_code == 201
+
+    items = client.get("/memory/list").get_json()
+    created = next(i for i in items if i["id"] == resp.get_json()["id"])
+    assert "metadata_json" in created
+    assert created["metadata"] == {"priority": "high", "attempt": 2, "urgent": True}
+
+
+def test_create_memory_rejects_non_object_metadata(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(metadata="not-an-object"),
+    )
+    assert resp.status_code == 400
+
+
 # ---------------------------------------------------------------------------
 # GET /memory/list
 # ---------------------------------------------------------------------------
@@ -97,6 +129,18 @@ def test_list_memories_returns_200_with_list(client):
 
 def test_list_memories_returns_empty_list_when_none_exist(client):
     assert client.get("/memory/list").get_json() == []
+
+
+def test_list_memories_rejects_unknown_profile(client):
+    resp = client.get("/memory/list?profile=does-not-exist")
+    assert resp.status_code == 400
+    assert "profile must be one of" in resp.get_json()["error"]
+
+
+def test_list_memories_without_profile_keeps_current_behavior(client):
+    resp = client.get("/memory/list")
+    assert resp.status_code == 200
+    assert isinstance(resp.get_json(), list)
 
 
 def test_list_memories_contains_inserted_memory(client):
@@ -117,6 +161,175 @@ def test_list_memories_grows_with_each_insert(client):
     assert len(client.get("/memory/list").get_json()) == 3
 
 
+def test_list_memories_filters_by_run_id(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="run-1", content="alpha", run_id="task-123"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="run-2", content="beta", run_id="task-999"),
+    )
+
+    items = client.get("/memory/list?run_id=task-123").get_json()
+    assert len(items) == 1
+    assert items[0]["run_id"] == "task-123"
+
+
+def test_list_memories_filters_by_tag(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="tag-1", content="alpha", tags="ops,decision"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="tag-2", content="beta", tags="ops,trace"),
+    )
+
+    items = client.get("/memory/list?tag=decision").get_json()
+    assert len(items) == 1
+    assert items[0]["name"] == "tag-1"
+
+
+def test_list_memories_filters_by_min_confidence(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="high", content="alpha"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="low", content="beta", description="low confidence"),
+    )
+    # Lower the second row confidence directly to validate filtering.
+    low_id = next(i["id"] for i in client.get("/memory/list").get_json() if i["name"] == "low")
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute("UPDATE memories SET confidence = 0.1 WHERE id = ?", (low_id,))
+        db.commit()
+
+    items = client.get("/memory/list?min_confidence=0.5").get_json()
+    assert all(i["confidence"] >= 0.5 for i in items)
+
+
+def test_list_memories_autonomous_profile_applies_default_min_confidence(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="auto-high", content="alpha"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="auto-low", content="beta"),
+    )
+
+    low_id = next(i["id"] for i in client.get("/memory/list").get_json() if i["name"] == "auto-low")
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute("UPDATE memories SET confidence = 0.1 WHERE id = ?", (low_id,))
+        db.commit()
+
+    items = client.get("/memory/list?profile=autonomous&agent_id=agent-alpha").get_json()
+    names = {i["name"] for i in items}
+    assert "auto-high" in names
+    assert "auto-low" not in names
+
+
+def test_list_memories_profile_default_can_be_overridden_by_explicit_param(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="override-high", content="alpha"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="override-low", content="beta"),
+    )
+
+    low_id = next(i["id"] for i in client.get("/memory/list").get_json() if i["name"] == "override-low")
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute("UPDATE memories SET confidence = 0.1 WHERE id = ?", (low_id,))
+        db.commit()
+
+    items = client.get(
+        "/memory/list?profile=autonomous&agent_id=agent-alpha&min_confidence=0"
+    ).get_json()
+    names = {i["name"] for i in items}
+    assert "override-high" in names
+    assert "override-low" in names
+
+
+def test_list_memories_autonomous_profile_requires_agent_id(client):
+    resp = client.get("/memory/list?profile=autonomous")
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "agent_id is required for the autonomous profile"
+
+
+def test_list_memories_general_profile_allows_missing_agent_id(client):
+    resp = client.get("/memory/list?profile=general")
+    assert resp.status_code == 200
+    assert isinstance(resp.get_json(), list)
+
+
+def test_list_memories_filters_by_metadata_string_value(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="m-string-1", metadata={"priority": "high"}),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="m-string-2", metadata={"priority": "low"}),
+    )
+
+    items = client.get(
+        "/memory/list?metadata_key=priority&metadata_value=high&metadata_value_type=string"
+    ).get_json()
+    assert len(items) == 1
+    assert items[0]["name"] == "m-string-1"
+
+
+def test_list_memories_filters_by_metadata_number_value(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="m-num-1", metadata={"attempt": 2}),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="m-num-2", metadata={"attempt": 1}),
+    )
+
+    items = client.get(
+        "/memory/list?metadata_key=attempt&metadata_value=2&metadata_value_type=number"
+    ).get_json()
+    assert len(items) == 1
+    assert items[0]["name"] == "m-num-1"
+
+
+def test_list_memories_filters_by_metadata_boolean_value(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="m-bool-1", metadata={"urgent": True}),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="m-bool-2", metadata={"urgent": False}),
+    )
+
+    items = client.get(
+        "/memory/list?metadata_key=urgent&metadata_value=true&metadata_value_type=boolean"
+    ).get_json()
+    assert len(items) == 1
+    assert items[0]["name"] == "m-bool-1"
+
+
+def test_list_memories_rejects_invalid_metadata_value_type(client):
+    resp = client.get(
+        "/memory/list?metadata_key=priority&metadata_value=high&metadata_value_type=array"
+    )
+    assert resp.status_code == 400
+
+
 # ---------------------------------------------------------------------------
 # GET /memory/recall
 # ---------------------------------------------------------------------------
@@ -125,6 +338,12 @@ def test_recall_returns_200_with_list(client):
     resp = client.get("/memory/recall?topic=anything")
     assert resp.status_code == 200
     assert isinstance(resp.get_json(), list)
+
+
+def test_recall_rejects_unknown_profile(client):
+    resp = client.get("/memory/recall?topic=anything&profile=unknown")
+    assert resp.status_code == 400
+    assert "profile must be one of" in resp.get_json()["error"]
 
 
 def test_recall_finds_matching_memory_by_name(client):
@@ -166,6 +385,64 @@ def test_recall_rejects_blank_topic(client):
     assert resp.status_code == 400
 
 
+def test_recall_autonomous_profile_applies_default_min_confidence(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="recall-high", content="profile-recall-token"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="recall-low", content="profile-recall-token"),
+    )
+
+    low_id = next(i["id"] for i in client.get("/memory/list").get_json() if i["name"] == "recall-low")
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute("UPDATE memories SET confidence = 0.1 WHERE id = ?", (low_id,))
+        db.commit()
+
+    results = client.get(
+        "/memory/recall?topic=profile-recall-token&profile=autonomous&agent_id=agent-alpha"
+    ).get_json()
+    names = {r["name"] for r in results}
+    assert "recall-high" in names
+    assert "recall-low" not in names
+
+
+def test_recall_autonomous_profile_requires_agent_id(client):
+    resp = client.get("/memory/recall?topic=anything&profile=autonomous")
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "agent_id is required for the autonomous profile"
+
+
+def test_recall_filters_by_tag(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="ops-1", content="deploy rollout", tags="deploy,ops"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="ops-2", content="deploy dry run", tags="test"),
+    )
+
+    results = client.get("/memory/recall?topic=deploy&tag=ops").get_json()
+    assert len(results) == 1
+    assert results[0]["name"] == "ops-1"
+
+
+def test_recall_includes_parsed_metadata(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="recall-meta", content="deploy metadata", metadata={"priority": "high"}),
+    )
+
+    results = client.get("/memory/recall?topic=deploy").get_json()
+    item = next(r for r in results if r["name"] == "recall-meta")
+    assert item["metadata"] == {"priority": "high"}
+    assert "metadata_json" in item
+
+
 # ---------------------------------------------------------------------------
 # GET /memory/search
 # ---------------------------------------------------------------------------
@@ -174,6 +451,12 @@ def test_memory_search_returns_200_with_list(client):
     resp = client.get("/memory/search?q=foo")
     assert resp.status_code == 200
     assert isinstance(resp.get_json(), list)
+
+
+def test_memory_search_rejects_unknown_profile(client):
+    resp = client.get("/memory/search?q=foo&profile=unknown")
+    assert resp.status_code == 400
+    assert "profile must be one of" in resp.get_json()["error"]
 
 
 def test_memory_search_returns_matching_record(client):
@@ -209,6 +492,59 @@ def test_memory_search_supports_limit_param(client):
 def test_memory_search_rejects_invalid_offset(client):
     resp = client.get("/memory/search?q=search&offset=-1")
     assert resp.status_code == 400
+
+
+def test_memory_search_rejects_invalid_min_confidence(client):
+    resp = client.get("/memory/search?q=search&min_confidence=2")
+    assert resp.status_code == 400
+
+
+def test_memory_search_rejects_invalid_recency_half_life(client):
+    resp = client.get("/memory/search?q=search&recency_half_life_hours=0")
+    assert resp.status_code == 400
+
+
+def test_memory_search_autonomous_profile_applies_default_min_confidence(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="search-high", content="profile-search-token"),
+    )
+    client.post(
+        "/memory",
+        json=_memory_payload(name="search-low", content="profile-search-token"),
+    )
+
+    low_id = next(i["id"] for i in client.get("/memory/list").get_json() if i["name"] == "search-low")
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute("UPDATE memories SET confidence = 0.1 WHERE id = ?", (low_id,))
+        db.commit()
+
+    results = client.get(
+        "/memory/search?q=profile-search-token&profile=autonomous&agent_id=agent-alpha"
+    ).get_json()
+    names = {r["name"] for r in results}
+    assert "search-high" in names
+    assert "search-low" not in names
+
+
+def test_memory_search_autonomous_profile_requires_agent_id(client):
+    resp = client.get("/memory/search?q=anything&profile=autonomous")
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "agent_id is required for the autonomous profile"
+
+
+def test_memory_search_includes_parsed_metadata(client):
+    client.post(
+        "/memory",
+        json=_memory_payload(name="search-meta", content="search metadata token", metadata={"attempt": 2}),
+    )
+
+    results = client.get("/memory/search?q=metadata").get_json()
+    item = next(r for r in results if r["name"] == "search-meta")
+    assert item["metadata"] == {"attempt": 2}
+    assert "metadata_json" in item
 
 
 # ---------------------------------------------------------------------------
@@ -286,6 +622,436 @@ def test_promote_memory_returns_403_for_non_owner(client):
 
     promote = client.post(f"/memory/{memory_id}/promote?agent_id=agent-beta")
     assert promote.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# POST /memory/archive and /memory/invalidate
+# ---------------------------------------------------------------------------
+
+def test_archive_memory_returns_200_for_owner(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="archive-me", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    archive = client.post(
+        "/memory/archive",
+        json={"memory_id": memory_id, "agent_id": "agent-alpha"},
+    )
+    assert archive.status_code == 200
+    assert archive.get_json()["status"] == "archived"
+
+
+def test_invalidate_memory_returns_200_for_owner(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="invalidate-me", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    invalidate = client.post(
+        "/memory/invalidate",
+        json={"memory_id": memory_id, "agent_id": "agent-alpha"},
+    )
+    assert invalidate.status_code == 200
+    assert invalidate.get_json()["status"] == "invalidated"
+
+
+def test_verify_memory_returns_200_for_owner(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="verify-me", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    verify = client.post(
+        "/memory/verify",
+        json={
+            "memory_id": memory_id,
+            "agent_id": "agent-alpha",
+            "verification_status": "verified",
+            "verification_source": "unit-test",
+        },
+    )
+    assert verify.status_code == 200
+    assert verify.get_json()["verification_status"] == "verified"
+
+
+def test_verify_memory_returns_403_for_non_owner(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="verify-private", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    verify = client.post(
+        "/memory/verify",
+        json={
+            "memory_id": memory_id,
+            "agent_id": "agent-beta",
+            "verification_status": "verified",
+        },
+    )
+    assert verify.status_code == 403
+
+
+def test_batch_memory_create_returns_results(client):
+    resp = client.post(
+        "/memory/batch",
+        json={
+            "memories": [
+                _memory_payload(name="batch-1", content="alpha", idempotency_key="batch-key-1"),
+                _memory_payload(name="batch-2", content="beta", idempotency_key="batch-key-2"),
+            ]
+        },
+    )
+    assert resp.status_code == 201
+    data = resp.get_json()
+    assert "results" in data
+    assert len(data["results"]) == 2
+
+
+def test_archive_memory_requires_json_body(client):
+    resp = client.post("/memory/archive")
+    assert resp.status_code == 400
+
+
+def test_archive_memory_requires_integer_memory_id(client):
+    resp = client.post(
+        "/memory/archive",
+        json={"memory_id": "1", "agent_id": "agent-alpha"},
+    )
+    assert resp.status_code == 400
+
+
+def test_archive_memory_returns_403_for_non_owner(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="archive-private", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    archive = client.post(
+        "/memory/archive",
+        json={"memory_id": memory_id, "agent_id": "agent-beta"},
+    )
+    assert archive.status_code == 403
+
+
+def test_archive_memory_returns_404_for_unknown_memory(client):
+    resp = client.post(
+        "/memory/archive",
+        json={"memory_id": 999999, "agent_id": "agent-alpha"},
+    )
+    assert resp.status_code == 404
+
+
+def test_archive_rejected_after_invalidation(client):
+    resp = client.post(
+        "/memory",
+        json=_memory_payload(name="invalidate-then-archive", visibility="private"),
+    )
+    memory_id = resp.get_json()["id"]
+
+    invalidate = client.post(
+        "/memory/invalidate",
+        json={"memory_id": memory_id, "agent_id": "agent-alpha"},
+    )
+    assert invalidate.status_code == 200
+
+    archive = client.post(
+        "/memory/archive",
+        json={"memory_id": memory_id, "agent_id": "agent-alpha"},
+    )
+    assert archive.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# POST /memory/cleanup-private
+# ---------------------------------------------------------------------------
+
+def test_cleanup_private_dry_run_returns_candidates_without_mutation(client):
+    private_id = client.post(
+        "/memory",
+        json=_memory_payload(name="stale-private-dry", visibility="private"),
+    ).get_json()["id"]
+
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "UPDATE memories SET updated_at = datetime('now', '-40 days') WHERE id = ?",
+            (private_id,),
+        )
+        db.commit()
+
+    cleanup = client.post(
+        "/memory/cleanup-private",
+        json={"retention_days": 30, "dry_run": True},
+    )
+    assert cleanup.status_code == 200
+    data = cleanup.get_json()
+    assert data["dry_run"] is True
+    assert data["candidate_count"] == 1
+    assert data["deleted_count"] == 0
+    assert private_id in data["candidate_ids"]
+
+    active_private = client.get(
+        "/memory/list?agent_id=agent-alpha&private_only=true&status=active"
+    ).get_json()
+    assert any(item["id"] == private_id for item in active_private)
+
+
+def test_cleanup_private_deletes_only_stale_private_memories(client):
+    stale_private_id = client.post(
+        "/memory",
+        json=_memory_payload(name="stale-private-delete", visibility="private"),
+    ).get_json()["id"]
+    stale_shared_id = client.post(
+        "/memory",
+        json=_memory_payload(name="stale-shared-keep", visibility="shared"),
+    ).get_json()["id"]
+
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "UPDATE memories SET updated_at = datetime('now', '-45 days') WHERE id IN (?, ?)",
+            (stale_private_id, stale_shared_id),
+        )
+        db.commit()
+
+    cleanup = client.post(
+        "/memory/cleanup-private",
+        json={"retention_days": 30, "dry_run": False, "status": "all"},
+    )
+    assert cleanup.status_code == 200
+    data = cleanup.get_json()
+    assert data["candidate_count"] == 1
+    assert data["deleted_count"] == 1
+    assert stale_private_id in data["candidate_ids"]
+
+    all_memories = client.get("/memory/list?status=active").get_json()
+    assert not any(item["id"] == stale_private_id for item in all_memories)
+    assert any(item["id"] == stale_shared_id for item in all_memories)
+
+
+def test_cleanup_private_respects_retention_days_boundary(client):
+    old_private_id = client.post(
+        "/memory",
+        json=_memory_payload(name="private-old", visibility="private"),
+    ).get_json()["id"]
+    fresh_private_id = client.post(
+        "/memory",
+        json=_memory_payload(name="private-fresh", visibility="private"),
+    ).get_json()["id"]
+
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "UPDATE memories SET updated_at = datetime('now', '-40 days') WHERE id = ?",
+            (old_private_id,),
+        )
+        db.execute(
+            "UPDATE memories SET updated_at = datetime('now', '-10 days') WHERE id = ?",
+            (fresh_private_id,),
+        )
+        db.commit()
+
+    cleanup = client.post(
+        "/memory/cleanup-private",
+        json={"retention_days": 30, "dry_run": False},
+    )
+    assert cleanup.status_code == 200
+    data = cleanup.get_json()
+    assert data["candidate_count"] == 1
+    assert data["deleted_count"] == 1
+    assert old_private_id in data["candidate_ids"]
+    assert fresh_private_id not in data["candidate_ids"]
+
+
+def test_cleanup_private_respects_owner_agent_filter(client):
+    alpha_private_id = client.post(
+        "/memory",
+        json=_memory_payload(name="alpha-private", visibility="private", owner_agent_id="agent-alpha"),
+    ).get_json()["id"]
+    beta_private_id = client.post(
+        "/memory",
+        json=_memory_payload(name="beta-private", visibility="private", owner_agent_id="agent-beta"),
+    ).get_json()["id"]
+
+    from db_utils import get_db  # noqa: PLC0415
+    with client.application.app_context():
+        db = get_db()
+        db.execute(
+            "UPDATE memories SET updated_at = datetime('now', '-60 days') WHERE id IN (?, ?)",
+            (alpha_private_id, beta_private_id),
+        )
+        db.commit()
+
+    cleanup = client.post(
+        "/memory/cleanup-private",
+        json={"retention_days": 30, "dry_run": False, "owner_agent_id": "agent-alpha", "status": "all"},
+    )
+    assert cleanup.status_code == 200
+    data = cleanup.get_json()
+    assert data["candidate_count"] == 1
+    assert data["deleted_count"] == 1
+    assert data["candidate_ids"] == [alpha_private_id]
+
+    all_rows = client.get("/memory/list?status=active").get_json()
+    assert any(item["id"] == beta_private_id for item in all_rows)
+
+
+def test_cleanup_private_rejects_invalid_params(client):
+    bad_retention = client.post(
+        "/memory/cleanup-private",
+        json={"retention_days": 0},
+    )
+    assert bad_retention.status_code == 400
+
+    bad_status = client.post(
+        "/memory/cleanup-private",
+        json={"retention_days": 30, "status": "retired"},
+    )
+    assert bad_status.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# POST /memory/merge and /memory/supersede
+# ---------------------------------------------------------------------------
+
+def test_merge_memory_returns_200_for_valid_relation(client):
+    source_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-source", visibility="private"),
+    ).get_json()["id"]
+    target_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-target", visibility="shared", owner_agent_id="agent-beta"),
+    ).get_json()["id"]
+
+    merge = client.post(
+        "/memory/merge",
+        json={
+            "memory_id": source_id,
+            "target_memory_id": target_id,
+            "agent_id": "agent-alpha",
+        },
+    )
+    assert merge.status_code == 200
+    data = merge.get_json()
+    assert data["source_memory_id"] == source_id
+    assert data["target_memory_id"] == target_id
+    assert data["relation_type"] == "merged_into"
+    assert data["source_status"] == "archived"
+
+    archived_items = client.get("/memory/list?status=archived").get_json()
+    assert any(item["id"] == source_id for item in archived_items)
+
+
+def test_merge_memory_rejects_same_source_and_target(client):
+    source_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-self", visibility="private"),
+    ).get_json()["id"]
+
+    merge = client.post(
+        "/memory/merge",
+        json={
+            "memory_id": source_id,
+            "target_memory_id": source_id,
+            "agent_id": "agent-alpha",
+        },
+    )
+    assert merge.status_code == 409
+
+
+def test_merge_memory_returns_403_when_source_not_owned_by_agent(client):
+    source_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-owned-by-alpha", visibility="private", owner_agent_id="agent-alpha"),
+    ).get_json()["id"]
+    target_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-target-shared", visibility="shared", owner_agent_id="agent-beta"),
+    ).get_json()["id"]
+
+    merge = client.post(
+        "/memory/merge",
+        json={
+            "memory_id": source_id,
+            "target_memory_id": target_id,
+            "agent_id": "agent-beta",
+        },
+    )
+    assert merge.status_code == 403
+
+
+def test_merge_memory_returns_403_when_target_private_of_other_agent(client):
+    source_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-source-private", visibility="private", owner_agent_id="agent-alpha"),
+    ).get_json()["id"]
+    target_id = client.post(
+        "/memory",
+        json=_memory_payload(name="merge-target-private", visibility="private", owner_agent_id="agent-beta"),
+    ).get_json()["id"]
+
+    merge = client.post(
+        "/memory/merge",
+        json={
+            "memory_id": source_id,
+            "target_memory_id": target_id,
+            "agent_id": "agent-alpha",
+        },
+    )
+    assert merge.status_code == 403
+
+
+def test_supersede_memory_returns_200_and_invalidates_source(client):
+    source_id = client.post(
+        "/memory",
+        json=_memory_payload(name="supersede-old", visibility="private"),
+    ).get_json()["id"]
+    replacement_id = client.post(
+        "/memory",
+        json=_memory_payload(name="supersede-new", visibility="private"),
+    ).get_json()["id"]
+
+    supersede = client.post(
+        "/memory/supersede",
+        json={
+            "memory_id": source_id,
+            "replacement_memory_id": replacement_id,
+            "agent_id": "agent-alpha",
+        },
+    )
+    assert supersede.status_code == 200
+    data = supersede.get_json()
+    assert data["relation_type"] == "superseded_by"
+    assert data["source_status"] == "invalidated"
+
+    invalidated_items = client.get("/memory/list?status=invalidated").get_json()
+    assert any(item["id"] == source_id for item in invalidated_items)
+
+
+def test_supersede_memory_requires_target_memory_id(client):
+    source_id = client.post(
+        "/memory",
+        json=_memory_payload(name="supersede-missing-target", visibility="private"),
+    ).get_json()["id"]
+
+    supersede = client.post(
+        "/memory/supersede",
+        json={
+            "memory_id": source_id,
+            "agent_id": "agent-alpha",
+        },
+    )
+    assert supersede.status_code == 400
 
 
 # ---------------------------------------------------------------------------
@@ -390,7 +1156,7 @@ def test_memory_list_endpoint_bounded_by_default_limit(client):
             "/memory",
             json=_memory_payload(name=f"perf-mem-{i}", content=f"content {i}"),
         )
-    
+
     # Should paginate, not return all 50
     results = client.get("/memory/list").get_json()
     assert len(results) <= 20
@@ -403,14 +1169,423 @@ def test_memory_list_supports_limit_and_offset(client):
             "/memory",
             json=_memory_payload(name=f"list-mem-{i}", content=f"content {i}"),
         )
-    
+
     # Should support limit and offset like other search endpoints
     resp = client.get("/memory/list?limit=5&offset=0")
     assert resp.status_code == 200
     results = resp.get_json()
     assert len(results) <= 5
-    
+
     resp2 = client.get("/memory/list?limit=5&offset=5")
     results2 = resp2.get_json()
     if results and results2:
         assert results[0]["id"] != results2[0]["id"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 3A: Memory read scoping by visibility and ownership
+# ---------------------------------------------------------------------------
+
+class TestMemoryReadScoping:
+    """Tests for read-path visibility and ownership scoping (Phase 3A PR-3)."""
+
+    def test_list_with_agent_id_includes_shared_and_own_private(self, client):
+        """GET /memory/list?agent_id=<id> should include shared + agent's private."""
+        # Create shared memory
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-mem",
+                content="shared content",
+                owner_agent_id="agent-alpha",
+                visibility="shared",
+            ),
+        )
+
+        # Create private memory for agent-alpha
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-alpha",
+                content="alpha private",
+                owner_agent_id="agent-alpha",
+                visibility="private",
+            ),
+        )
+
+        # Create private memory for agent-beta
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-beta",
+                content="beta private",
+                owner_agent_id="agent-beta",
+                visibility="private",
+            ),
+        )
+
+        # List as agent-alpha should see shared + their private, not beta's private
+        resp = client.get("/memory/list?agent_id=agent-alpha")
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert "shared-mem" in names, "Should see shared memories"
+        assert "private-alpha" in names, "Should see own private memories"
+        assert "private-beta" not in names, "Should not see other agent's private memories"
+
+    def test_list_shared_only_flag(self, client):
+        """GET /memory/list?agent_id=<id>&shared_only=true should return only shared."""
+        # Create shared and private
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-1",
+                visibility="shared",
+                agent_id="agent-alpha",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-1",
+                visibility="private",
+                agent_id="agent-alpha",
+            ),
+        )
+
+        # List with shared_only
+        resp = client.get("/memory/list?agent_id=agent-alpha&shared_only=true")
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert "shared-1" in names, "Should see shared"
+        assert "private-1" not in names, "Should not see private with shared_only"
+
+    def test_list_private_only_flag(self, client):
+        """GET /memory/list?agent_id=<id>&private_only=true should return only own private."""
+        # Create shared and private
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-2",
+                visibility="shared",
+                agent_id="agent-alpha",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-2",
+                visibility="private",
+                agent_id="agent-alpha",
+            ),
+        )
+
+        # List with private_only
+        resp = client.get("/memory/list?agent_id=agent-alpha&private_only=true")
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert "private-2" in names, "Should see own private"
+        assert "shared-2" not in names, "Should not see shared with private_only"
+
+    def test_list_rejects_conflicting_scope_flags(self, client):
+        """GET /memory/list should reject both shared_only and private_only."""
+        resp = client.get("/memory/list?agent_id=agent-alpha&shared_only=true&private_only=true")
+        assert resp.status_code == 400
+        assert "cannot" in resp.get_json().get("error", "").lower()
+
+    def test_search_with_scoping(self, client):
+        """GET /memory/search?agent_id=<id> should scope FTS results."""
+        # Create shared and private memories with unique content
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-search",
+                content="unique-shared-marker",
+                visibility="shared",
+                owner_agent_id="agent-alpha",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-search",
+                content="unique-private-marker",
+                visibility="private",
+                owner_agent_id="agent-alpha",
+            ),
+        )
+
+        # Search as agent-alpha should find both
+        resp = client.get("/memory/search?q=unique&agent_id=agent-alpha")
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert "shared-search" in names or "private-search" in names, (
+            "Should find scoped search results"
+        )
+
+    def test_recall_with_scoping(self, client):
+        """GET /memory/recall?topic=<t>&agent_id=<id> should scope FTS results."""
+        # Create shared and private memories
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-recall",
+                content="deployment shared",
+                visibility="shared",
+                owner_agent_id="agent-alpha",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-recall",
+                content="deployment private",
+                visibility="private",
+                owner_agent_id="agent-alpha",
+            ),
+        )
+
+        # Recall as agent-alpha should find both
+        resp = client.get("/memory/recall?topic=deployment&agent_id=agent-alpha")
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert "shared-recall" in names or "private-recall" in names, (
+            "Should find scoped recall results"
+        )
+
+    def test_list_without_agent_id_unscoped_legacy_behavior(self, client):
+        """GET /memory/list without agent_id should return all memories (legacy)."""
+        # Create memories as different agents
+        for agent in ["alpha", "beta"]:
+            client.post(
+                "/memory",
+                json=_memory_payload(
+                    name=f"mem-{agent}",
+                    visibility="private",
+                    owner_agent_id=f"agent-{agent}",
+                ),
+            )
+
+        # List without agent_id should see all (legacy compatibility)
+        resp = client.get("/memory/list")
+        assert resp.status_code == 200
+        # With legacy behavior, both should be visible
+        names = {m.get("name") for m in resp.get_json()}
+        assert "mem-alpha" in names
+        assert "mem-beta" in names
+        # This documents current behavior; scoping requires agent_id
+
+    def test_list_rejects_invalid_visibility_filter(self, client):
+        resp = client.get("/memory/list?visibility=team")
+        assert resp.status_code == 400
+        assert "visibility" in resp.get_json().get("error", "").lower()
+
+    def test_list_rejects_blank_owner_filter(self, client):
+        resp = client.get("/memory/list?owner_agent_id=   ")
+        assert resp.status_code == 400
+        assert "owner_agent_id" in resp.get_json().get("error", "")
+
+    def test_list_filters_compose_with_scoped_default(self, client):
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-alpha",
+                owner_agent_id="agent-alpha",
+                visibility="shared",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-beta",
+                owner_agent_id="agent-beta",
+                visibility="shared",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-alpha",
+                owner_agent_id="agent-alpha",
+                visibility="private",
+            ),
+        )
+
+        resp = client.get(
+            "/memory/list?agent_id=agent-alpha&visibility=shared&owner_agent_id=agent-beta"
+        )
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert names == {"shared-beta"}
+
+    def test_list_prefers_shared_memories_before_private(self, client):
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="private-ranked",
+                owner_agent_id="agent-alpha",
+                visibility="private",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="shared-ranked",
+                owner_agent_id="agent-alpha",
+                visibility="shared",
+            ),
+        )
+
+        resp = client.get("/memory/list?agent_id=agent-alpha")
+        assert resp.status_code == 200
+        names = [m.get("name") for m in resp.get_json()[:2]]
+        assert names == ["shared-ranked", "private-ranked"]
+
+    def test_search_filters_by_owner_without_agent_id(self, client):
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="alpha-hit",
+                content="shared token",
+                owner_agent_id="agent-alpha",
+                visibility="shared",
+            ),
+        )
+        client.post(
+            "/memory",
+            json=_memory_payload(
+                name="beta-hit",
+                content="shared token",
+                owner_agent_id="agent-beta",
+                visibility="shared",
+            ),
+        )
+
+        resp = client.get("/memory/search?q=token&owner_agent_id=agent-alpha")
+        assert resp.status_code == 200
+        names = {m.get("name") for m in resp.get_json()}
+        assert names == {"alpha-hit"}
+
+    def test_default_reads_exclude_archived(self, client):
+        create = client.post(
+            "/memory",
+            json=_memory_payload(
+                name="becomes-archived",
+                content="status-token",
+                owner_agent_id="agent-alpha",
+                visibility="shared",
+            ),
+        )
+        memory_id = create.get_json()["id"]
+        archive = client.post(
+            "/memory/archive",
+            json={"memory_id": memory_id, "agent_id": "agent-alpha"},
+        )
+        assert archive.status_code == 200
+
+        list_resp = client.get("/memory/list?agent_id=agent-alpha")
+        list_names = {m.get("name") for m in list_resp.get_json()}
+        assert "becomes-archived" not in list_names
+
+        search_resp = client.get("/memory/search?q=status-token&agent_id=agent-alpha")
+        search_names = {m.get("name") for m in search_resp.get_json()}
+        assert "becomes-archived" not in search_names
+
+    def test_status_filter_allows_archived_reads(self, client):
+        create = client.post(
+            "/memory",
+            json=_memory_payload(
+                name="archived-visible",
+                content="archived-token",
+                owner_agent_id="agent-alpha",
+                visibility="shared",
+            ),
+        )
+        memory_id = create.get_json()["id"]
+        archive = client.post(
+            "/memory/archive",
+            json={"memory_id": memory_id, "agent_id": "agent-alpha"},
+        )
+        assert archive.status_code == 200
+
+        list_resp = client.get("/memory/list?agent_id=agent-alpha&status=archived")
+        list_names = {m.get("name") for m in list_resp.get_json()}
+        assert "archived-visible" in list_names
+
+        search_resp = client.get(
+            "/memory/search?q=archived-token&agent_id=agent-alpha&status=archived"
+        )
+        search_names = {m.get("name") for m in search_resp.get_json()}
+        assert "archived-visible" in search_names
+
+
+# ---------------------------------------------------------------------------
+# Write atomicity invariants
+#
+# These tests document the expected all-or-nothing behavior for multi-row
+# write operations. Tests marked xfail prove bugs that the transactional
+# write refactor (see docs/plans/transactional-write-guarantees.md) must fix.
+# Remove the xfail marker once the refactor makes the assertion pass.
+# ---------------------------------------------------------------------------
+
+
+
+def test_batch_write_partial_failure_commits_no_rows(client):
+    """A batch returning 400 must leave the database entirely unchanged.
+
+    Sends a two-item batch where item 0 is valid and item 1 is invalid (empty
+    name). The expected contract is all-or-nothing: either both rows are written
+    (201) or neither row is written (400).
+    """
+    resp = client.post(
+        "/memory/batch",
+        json={
+            "memories": [
+                _memory_payload(name="tx-batch-should-not-persist", content="first item"),
+                _memory_payload(name="", content="empty name triggers 400"),
+            ]
+        },
+    )
+    assert resp.status_code == 400
+
+    items = client.get("/memory/list").get_json()
+    names = {m.get("name") for m in items}
+    assert "tx-batch-should-not-persist" not in names, (
+        "item 0 was committed despite the batch returning 400 — partial write detected"
+    )
+
+
+def test_batch_write_idempotent_replay_creates_no_duplicates(client):
+    """A successful batch replayed with the same idempotency keys must not create
+    duplicate rows.
+
+    This is the core idempotency contract that must survive the transactional
+    refactor unchanged.
+    """
+    payload = {
+        "memories": [
+            _memory_payload(
+                name="idem-replay-1",
+                content="first",
+                idempotency_key="tx-idem-replay-1",
+            ),
+            _memory_payload(
+                name="idem-replay-2",
+                content="second",
+                idempotency_key="tx-idem-replay-2",
+            ),
+        ]
+    }
+
+    first = client.post("/memory/batch", json=payload)
+    assert first.status_code == 201
+    first_ids = {r["id"] for r in first.get_json()["results"]}
+
+    replay = client.post("/memory/batch", json=payload)
+    assert replay.status_code == 201
+    replay_ids = {r["id"] for r in replay.get_json()["results"]}
+
+    assert first_ids == replay_ids, "replay must return the same IDs, not new rows"
+
+    items = client.get("/memory/list").get_json()
+    matching = [i for i in items if i["name"] in {"idem-replay-1", "idem-replay-2"}]
+    assert len(matching) == 2, "exactly two rows must exist — no duplicates from replay"

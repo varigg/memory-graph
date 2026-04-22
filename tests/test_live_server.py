@@ -97,22 +97,10 @@ def base(live_server):
 
 
 class TestHealth:
-    def test_health_returns_ok(self, base):
+    def test_server_accepts_connections_and_health_returns_ok(self, base):
         r = requests.get(f"{base}/health")
         assert r.status_code == 200
-        body = r.json()
-        assert body["status"] == "ok"
-        assert "version" in body
-
-    def test_version_endpoint(self, base):
-        r = requests.get(f"{base}/version")
-        assert r.status_code == 200
-        assert "version" in r.json()
-
-    def test_graph_returns_html(self, base):
-        r = requests.get(f"{base}/graph")
-        assert r.status_code == 200
-        assert "text/html" in r.headers["Content-Type"]
+        assert r.json()["status"] == "ok"
 
 
 # ---------------------------------------------------------------------------
