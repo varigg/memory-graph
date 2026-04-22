@@ -153,7 +153,9 @@ def batch_write_findings(findings: list[Finding], run_id: str) -> list[MemoryWri
 
         # Track findings that need verification
         if verified and "verification_source" in finding:
-            verification_updates.append((finding["name"], verified, finding["verification_source"]))
+            verification_updates.append(
+                (finding["name"], finding["verification_source"])
+            )
 
     # POST to /memory/batch
     payload = {"memories": api_memories}
@@ -173,10 +175,12 @@ def batch_write_findings(findings: list[Finding], run_id: str) -> list[MemoryWri
                 if idx < len(api_memories):
                     results.append({"name": api_memories[idx]["name"], "memory_id": result["id"]})
             
-            # Now verify the ones marked as verified (requires separate API call)
-            for idx, (name, _, verification_source) in enumerate(verification_updates):
-                if idx < len(results) and results[idx]["name"] == name:
-                    memory_id = results[idx]["memory_id"]
+            # Now verify the ones marked as verified (requires separate API call).
+            # Map names to IDs so verification does not depend on filtered list indices.
+            memory_id_by_name = {r["name"]: r["memory_id"] for r in results}
+            for name, verification_source in verification_updates:
+                memory_id = memory_id_by_name.get(name)
+                if memory_id is not None:
                     _verify_memory(memory_id, verification_source)
             
             return results

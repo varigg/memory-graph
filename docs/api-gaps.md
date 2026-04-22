@@ -1,12 +1,17 @@
 # API Documentation Gaps
 
-Gaps discovered while building and testing `agent_memory_client.py`. Each entry
-notes the discrepancy, the discovered behavior, and whether the README or code
-should be updated to close the gap.
+Gaps discovered while building and testing `agent_memory_client.py`.
+
+Status legend:
+
+- `open`: documentation does not yet match runtime behavior
+- `resolved`: README now reflects observed behavior
 
 ---
 
 ## 1. `POST /memory/batch` — `verification_status` silently ignored
+
+**Status**: resolved
 
 **Discovered**: 2026-04-21
 
@@ -20,14 +25,15 @@ Verification requires a separate `POST /memory/verify` call after the batch writ
 **Workaround**: Two-pass write — batch write first, then call `/memory/verify` for
 each memory that should be marked verified. Implemented in `agent_memory_client.py`.
 
-**Resolution needed**: README should document that `verification_status` is not
-accepted by `POST /memory/batch` and that callers must use `POST /memory/verify`
-for explicit verification. Alternatively, the endpoint could be extended to accept
-and apply `verification_status` during write.
+**Resolution applied**: README now documents that batch writes default to
+`verification_status=unverified` and that callers should use `POST /memory/verify`
+for confirmed memories.
 
 ---
 
 ## 2. `GET /memory/list` — response is a bare array, not a keyed object
+
+**Status**: resolved
 
 **Discovered**: 2026-04-21
 
@@ -38,12 +44,14 @@ and apply `verification_status` during write.
 wrapped object `{"memories": [...]}`. This differs from what one might infer from the
 batch write response shape or from the recall endpoint.
 
-**Resolution needed**: README should explicitly document the response shape for
-`GET /memory/list` (and confirm whether `recall` and `search` follow the same pattern).
+**Resolution applied**: README now documents that `GET /memory/list`,
+`GET /memory/recall`, and `GET /memory/search` return a bare JSON array.
 
 ---
 
 ## 3. `POST /memory/batch` — response shape not documented
+
+**Status**: resolved
 
 **Discovered**: 2026-04-21
 
@@ -55,7 +63,8 @@ results array is positionally aligned with the input `memories` array; there is 
 `name` field in each result, so callers must zip results against the input array to
 correlate IDs back to names.
 
-**Resolution needed**: README should document the exact batch write response shape,
-including the positional alignment between request `memories` and response `results`.
+**Resolution applied**: README now documents the batch response shape as
+`{"results": [{"id": <int>, "created": <bool>}, ...]}` and calls out positional
+alignment with request `memories`.
 
 ---

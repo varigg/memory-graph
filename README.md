@@ -160,8 +160,13 @@ Application-level handlers are registered for `404`, `405`, `413`, and `500`.
     `visibility` (optional: `shared` or `private`, default `shared`)
   - Optional write controls: `tags`, `run_id`, `idempotency_key`,
     `metadata` (JSON object)
+  - Verification defaults: new memories are created with `verification_status=unverified`
+  - Verification fields are managed via `POST /memory/verify` (not as write-time controls)
 - `POST /memory/batch`
   - Body: `{"memories": [ ... ]}` where each item follows `POST /memory`
+  - Response: `201 {"results": [{"id": <int>, "created": <bool>}, ...]}`
+  - Response/results are positionally aligned with request `memories`
+  - Batch writes default every row to `verification_status=unverified`; callers should follow with `POST /memory/verify` for confirmed memories
 - `POST /memory/<id>/promote?agent_id=<id>`
   - Owner-only promote of private memory to shared
 - `POST /memory/archive`
@@ -172,6 +177,14 @@ Application-level handlers are registered for `404`, `405`, `413`, and `500`.
   - Body: `memory_id` (required int), `agent_id` (required),
     `verification_status` (`unverified|verified|disputed`),
     `verification_source` (optional)
+- `POST /memory/merge`
+  - Body: `memory_id` (required int), `target_memory_id` (required int), `agent_id` (required)
+  - Alias: `replacement_memory_id` is accepted as an alternative to `target_memory_id`
+  - Effect: relates source as `merged_into` target and archives the source memory
+- `POST /memory/supersede`
+  - Body: `memory_id` (required int), `target_memory_id` (required int), `agent_id` (required)
+  - Alias: `replacement_memory_id` is accepted as an alternative to `target_memory_id`
+  - Effect: relates source as `superseded_by` target and invalidates the source memory
 - `POST /memory/cleanup-private`
   - Body: `retention_days` (required int > 0), `dry_run` (optional bool, default `true`),
     `owner_agent_id` (optional string), `status` (optional: `active|archived|invalidated|all`, default `active`)
@@ -180,6 +193,10 @@ Application-level handlers are registered for `404`, `405`, `413`, and `500`.
 - `GET /memory/recall?topic=<topic>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
 - `GET /memory/search?q=<query>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
 - `DELETE /memory/<id>`
+
+Memory read response shape:
+
+- `GET /memory/list`, `GET /memory/recall`, and `GET /memory/search` return a bare JSON array (`[{...}, ...]`)
 
 Additional memory retrieval filters (for `list`, `recall`, and `search`):
 
