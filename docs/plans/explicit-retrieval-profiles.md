@@ -26,34 +26,33 @@ intent, not a new query language.
 
 Two profiles for the initial slice:
 
-| Profile name | Target caller | Key defaults |
-|---|---|---|
+| Profile name | Target caller                 | Key defaults                                                                                         |
+| ------------ | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `autonomous` | harness, agent-driven scripts | `status=active`, `min_confidence=0.7`, `recency_half_life_hours=168` (one week), requires `agent_id` |
-| `general` | UI, ops queries, debugging | all current defaults (no imposed filters) |
+| `general`    | UI, ops queries, debugging    | all current defaults (no imposed filters)                                                            |
 
 The `general` profile is the current behavior and requires no code change — it is simply named
 explicitly so the contrast with `autonomous` is declared rather than implicit.
 
 ## Scope
 
-This feature is intentionally narrow. A profile sets defaults; it does not change the API
-surface, add new endpoints, or prevent callers from overriding individual parameters.
+This feature is intentionally narrow. A profile sets defaults; it does not change endpoint
+shapes and does not alter service/repository behavior.
 
-**What changes:**
+### In scope
 
-- `GET /memory/list`, `/memory/recall`, `/memory/search` accept an optional `profile` query
-  parameter.
-- If `profile=autonomous`: apply the `autonomous` defaults for any parameter the caller did not
-  supply, and return 400 if `agent_id` is absent.
-- If `profile=general` or no `profile` param: existing behavior, unchanged.
-- Unknown profile name → 400 with a clear error message listing valid profiles.
+- Optional `profile` query parameter on retrieval endpoints.
+- Server-declared profile names with explicit validation.
+- Default injection only when a caller did not supply a value.
+- One profile-oriented guardrail: `autonomous` requires `agent_id`.
 
-**What does not change:**
+### Out of scope
 
-- No new endpoints.
-- No change to response shape.
-- No new authentication or caller identity mechanism.
-- Parameters explicitly supplied by the caller always take precedence over profile defaults.
+- New endpoints.
+- Response shape changes.
+- Auth or caller identity redesign.
+- Service-layer ranking algorithm changes.
+- Repository SQL changes.
 
 ## Why `profile=` as a Query Parameter
 
@@ -62,12 +61,19 @@ visible in logs, testable with existing test client patterns. A custom header (`
 is cleaner for programmatic clients but adds friction for debugging and is unnecessary at this
 scale.
 
-## Implementation Approach
+## Delivery Slices
 
-### 1. Define profiles in a single location
+The original draft bundled multiple endpoint and validation changes into one pass. The revised
+plan below breaks work into narrow, independently shippable slices.
 
-Add a `RETRIEVAL_PROFILES` dict in `blueprints/_params.py` (or a new `blueprints/_profiles.py`
-if it grows). Example:
+### Slice 1: Profile registry and parser only
+
+Goal: introduce profile naming and validation without changing retrieval behavior.
+
+Changes:
+
+- Add a `RETRIEVAL_PROFILES` dict in `blueprints/_params.py` (or a new `blueprints/_profiles.py`
+  if it grows). Example:
 
 ```python
 RETRIEVAL_PROFILES = {
@@ -81,16 +87,25 @@ RETRIEVAL_PROFILES = {
 }
 ```
 
-### 2. Parse the profile parameter in `_params.py`
+- Add a `parse_profile()` helper that reads `profile` from `request.args`, validates it against
+  `RETRIEVAL_PROFILES`, and returns a defaults dict (or a 400 error tuple).
 
-Add a `parse_profile()` helper that reads `profile` from `request.args`, validates it against
-`RETRIEVAL_PROFILES`, and returns the defaults dict (or a 400 error tuple). Return `None` for
-absent profile (caller gets general behavior transparently).
+Acceptance criteria:
 
-### 3. Apply profile defaults in the blueprint before parameter parsing
+- Unknown profile name returns 400.
+- Missing profile is treated as current behavior.
+- No retrieval endpoint behavior changes yet.
 
-For each retrieval route, call `parse_profile()` first. Merge its defaults into the parameter
-resolution so that an explicit caller value always wins:
+### Slice 2: Apply profile defaults to `/memory/list` only
+
+Goal: prove the default-injection model on one endpoint before expanding.
+
+Changes:
+
+- In `blueprints/memory.py`, apply `parse_profile()` to `list_memories()`.
+- Merge defaults so explicit caller params always win.
+
+Reference merge pattern:
 
 ```python
 profile_defaults, err_resp, err_status = parse_profile()
@@ -105,23 +120,62 @@ if status is None:
 # etc.
 ```
 
-### 4. Guard `autonomous` profile on `agent_id`
+Acceptance criteria:
 
-If `_require_agent_id` is set in the profile and `agent_id` is absent or empty, return 400:
-`"agent_id is required for the autonomous profile"`.
+- `profile=autonomous` with no explicit `status` applies `status=active` on list calls.
+- Explicit query params override profile defaults.
+- Existing non-profile list calls are unchanged.
 
-### 5. Service layer stays unchanged
+### Slice 3: Expand to `/memory/recall` and `/memory/search`
 
-No changes to `memory_retrieval_service.py` or any repository. Profiles are pure blueprint-layer
-default injection.
+Goal: align the other read endpoints after list behavior is stable.
 
-## File-Level Change Map
+Changes:
 
-| File | Change |
-|---|---|
-| `blueprints/_params.py` | Add `RETRIEVAL_PROFILES` dict and `parse_profile()` helper |
-| `blueprints/memory.py` | Call `parse_profile()` at top of list/recall/search routes; merge defaults |
-| `tests/test_memory.py` | Add profile parameter tests: unknown name → 400; `autonomous` without `agent_id` → 400; `autonomous` applies default filters; explicit param overrides profile default |
+- Reuse the same parser and merge pattern in `recall_memory()` and `search_memory()`.
+
+Acceptance criteria:
+
+- Recall/search behavior matches list profile semantics.
+- Existing tests for non-profile recall/search remain green.
+
+### Slice 4: Add `autonomous` guardrail (`agent_id` required)
+
+Goal: add the only profile-specific validation rule.
+
+Changes:
+
+- If `_require_agent_id` is set in selected profile and `agent_id` is empty, return 400:
+  `"agent_id is required for the autonomous profile"`.
+
+Acceptance criteria:
+
+- Guardrail enforced on list/recall/search when `profile=autonomous`.
+- `profile=general` keeps current permissive behavior.
+
+### Stability constraint
+
+Service layer remains unchanged for all slices. Profiles are blueprint-layer default injection
+only.
+
+## File-Level Change Map (By Slice)
+
+| Slice | File                    | Change                                                                     |
+| ----- | ----------------------- | -------------------------------------------------------------------------- |
+| 1     | `blueprints/_params.py` | Add `RETRIEVAL_PROFILES` and `parse_profile()` helper                      |
+| 1     | `tests/test_memory.py`  | Add parser/validation tests for unknown profile and no-profile passthrough |
+| 2     | `blueprints/memory.py`  | Add profile default merge to `list_memories()`                             |
+| 2     | `tests/test_memory.py`  | Add list-specific profile default and override tests                       |
+| 3     | `blueprints/memory.py`  | Add profile default merge to `recall_memory()` and `search_memory()`       |
+| 3     | `tests/test_memory.py`  | Add recall/search profile behavior tests                                   |
+| 4     | `blueprints/memory.py`  | Enforce `_require_agent_id` for `autonomous` profile                       |
+| 4     | `tests/test_memory.py`  | Add guardrail tests (`autonomous` without `agent_id` => 400)               |
+
+## PR strategy
+
+- Preferred: one slice per PR.
+- Acceptable: combine slices 1+2 only if review overhead is high.
+- Avoid: shipping slices 1 through 4 in a single PR.
 
 ## Precondition
 
