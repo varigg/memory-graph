@@ -189,9 +189,9 @@ Application-level handlers are registered for `404`, `405`, `413`, and `500`.
   - Body: `retention_days` (required int > 0), `dry_run` (optional bool, default `true`),
     `owner_agent_id` (optional string), `status` (optional: `active|archived|invalidated|all`, default `active`)
   - Response summary: `candidate_count`, `deleted_count`, `candidate_ids`, `cutoff_timestamp`
-- `GET /memory/list?limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
-- `GET /memory/recall?topic=<topic>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
-- `GET /memory/search?q=<query>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>`
+- `GET /memory/list?limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>&profile=<p>`
+- `GET /memory/recall?topic=<topic>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>&profile=<p>`
+- `GET /memory/search?q=<query>&limit=<int>&offset=<int>&agent_id=<id>&shared_only=<bool>&private_only=<bool>&visibility=<v>&owner_agent_id=<id>&status=<s>&profile=<p>`
 - `DELETE /memory/<id>`
 
 Memory read response shape:
@@ -200,6 +200,7 @@ Memory read response shape:
 
 Additional memory retrieval filters (for `list`, `recall`, and `search`):
 
+- `profile=general|autonomous`
 - `run_id=<id>`
 - `tag=<token>`
 - `min_confidence=<0..1>`
@@ -208,6 +209,15 @@ Additional memory retrieval filters (for `list`, `recall`, and `search`):
 - `metadata_key=<key>`
 - `metadata_value=<value>`
 - `metadata_value_type=string|number|boolean|null`
+
+Retrieval profile behavior:
+
+- `profile=general` keeps current permissive retrieval behavior (same as omitting `profile`)
+- `profile=autonomous` applies defaults when caller does not provide explicit values:
+  `status=active`, `min_confidence=0.7`, `recency_half_life_hours=168`
+- explicit query parameters always override profile defaults
+- `profile=autonomous` requires `agent_id`; missing or blank `agent_id` returns `400`
+- unknown `profile` values return `400`
 
 Read-scope behavior when `agent_id` is provided:
 

@@ -83,13 +83,19 @@ added to `db_utils.py`; `insert_memory` and `delete_memories_by_ids` no longer a
 batch orchestration moved into a service-owned transaction; lifecycle service migrated onto the
 same pattern. All 437 tests pass.
 
+Explicit retrieval profiles are **implemented** (2026-04-22). `profile=general|autonomous` is now
+supported on `/memory/list`, `/memory/recall`, and `/memory/search`; autonomous defaults are
+applied when omitted by caller (`status=active`, `min_confidence=0.7`,
+`recency_half_life_hours=168`), explicit query params still override profile defaults, and
+`profile=autonomous` requires `agent_id`.
+
 Recommended implementation order after Phase 3:
 
 1. ~~Transactional write guarantees~~ **Implemented** (2026-04-21) — `write_transaction` context manager, composable repository helpers, atomic batch and lifecycle flows. See `docs/plans/transactional-write-guarantees.md`.
-2. Explicit retrieval profiles for autonomous versus general clients so the harness can rely on stable default retrieval behavior
-3. Minimal harness bridge primitives (goal/action-log/autonomy-checkpoint surfaces) once transactional and retrieval invariants are stable
+2. ~~Explicit retrieval profiles~~ **Implemented** (2026-04-22) — profile defaults and guardrails for memory read endpoints. See `docs/plans/explicit-retrieval-profiles.md`.
+3. Minimal harness bridge primitives (goal/action-log/autonomy-checkpoint surfaces) once retrieval and write invariants are stable
 
-The next planned item is **explicit retrieval profiles**.
+The next planned item is **minimal harness bridge primitives**.
 
 Primary planning document for item 2:
 

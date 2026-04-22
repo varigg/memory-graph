@@ -1,5 +1,14 @@
 # Explicit Retrieval Profiles
 
+Status: Implemented (2026-04-22)
+
+Implementation notes:
+
+- Endpoint behavior implemented in `blueprints/_params.py` and `blueprints/memory.py`
+- Tests added in `tests/test_memory.py`
+- Main implementation commit: `8da6ae0`
+- Plan slicing docs update commit: `9fe872d`
+
 ## Problem
 
 Every retrieval call to `/memory/list`, `/memory/recall`, and `/memory/search` accepts
