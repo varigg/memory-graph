@@ -390,6 +390,16 @@ conversation insert. Keywords and scores are managed via API:
 (assistant), 0.1 (system). Hit counts are tracked per keyword; the
 preference learning cron uses them to adjust scores over time.
 
+## Deployment
+
+`BOOTSTRAP.md` in the repository root is the executable deployment
+artifact derived from this document. It contains the exact `CLAUDE.md`
+text to write, the 15 cron prompt files verbatim, and the verification
+steps needed to bring up a fresh autonomous agent instance against the
+already-running service. When the cron specs, operational rules, or
+bootstrap contract in this document change, update `BOOTSTRAP.md` to
+match. Do not edit `BOOTSTRAP.md` directly.
+
 ## What Memory Graph Is Not
 
 Memory Graph is not a planner, a scheduler, a goal engine, or a world
