@@ -16,6 +16,11 @@ acts as the autonomous agent. It receives messages, executes work, schedules
 its own recurring tasks via `CronCreate`, and maintains continuity across
 restarts through the memory-graph service.
 
+The session is launched with `--dangerously-skip-permissions` so it can
+operate without blocking on tool-use approval prompts. This is required for
+unattended 24/7 operation — a session that halts waiting for permission
+confirmation is not autonomous.
+
 The session is the planner, the decision-maker, and the executor. Memory
 Graph is where it externalizes state that must survive beyond a single
 session.
