@@ -116,6 +116,56 @@ Both clients share the same service and datastore. The difference is in
 retrieval policy and which endpoint families each client uses — not in
 deployment topology.
 
+## System Cron Jobs
+
+The autonomous agent maintains a set of standing cron jobs that constitute
+its operational loop. These are defined as prompt files in `~/.claude/prompts/`
+and recreated on session start if missing. The heartbeat cron (every hour)
+verifies all others are active and recreates any that have lapsed.
+
+Jobs marked **current** run against the implemented service surface. Jobs
+marked **planned** depend on surfaces not yet built.
+
+### Infrastructure and self-monitoring
+
+| # | Name | Schedule | What it does |
+|---|------|----------|--------------|
+| 2 | Cron watchdog | Every 6h (:23) | Verify no crons are within 24h of their 7-day TTL; alert if any are about to expire |
+| 4 | Heartbeat | Every 1h (:43) | System state check; verify all crons active and recreate missing; send one social message per day (50/50) if no alerts; silent 00:00–08:00 |
+| 9 | Memory API health | Every 3h (:33) | Check service health endpoint; auto-restart if down; notify user of failures |
+
+### Memory and knowledge maintenance
+
+| # | Name | Schedule | What it does |
+|---|------|----------|--------------|
+| 10 | Weekly summarization | Sundays 4:47 | Compress old conversation logs into weekly summaries; originals preserved |
+| 12 | Memory decay | Sundays 5:17 | `POST /memory/decay` with `halflife_days=60`; reduces confidence on unverified beliefs (**planned**) |
+
+### Reflection and learning
+
+| # | Name | Schedule | What it does |
+|---|------|----------|--------------|
+| 5 | Monthly usage | Days 28–31, 10:03 | Run usage report script; remind user to send stats from other machines |
+| 6 | Reflection | Every 12h (11:27, 23:27) | Review logs for patterns, mistakes, and insights; save to `/reflection` |
+| 7 | Preference learning | Daily 3:07 | Analyze feedback patterns; generate preference rules; propose code changes |
+
+### Goal and plan management (planned)
+
+| # | Name | Schedule | What it does |
+|---|------|----------|--------------|
+| 11 | Goal prioritizer | Daily 9:37 | Flag goals with deadline < 3 days or no progress > 5 days via `GET /goal/active` and `GET /goal/next` |
+
+### Self-improvement surfaces (planned)
+
+| # | Name | Schedule | What it does |
+|---|------|----------|--------------|
+| 13 | Daily metrics | Daily 22:23 | Compute `hallucination_rate`, `calibration_gap`, `world_model_precision`, `goals_completed_today`; write via `POST /metric` |
+| 14 | Predictions resolver | Daily 21:53 | Resolve predictions with `due_at` in the past where evidence is clear |
+| 15 | Skill promotion | Daily 2:37 | Auto-promote: `draft→beta` (≥ 1 run), `beta→stable` (≥ 3 runs and ≥ 66% success), `stable→deprecated` (< 50% in last 10) |
+| 16 | Experiments runner | Every 6h (:17) | For running experiments below `min_samples`: pick variant with fewest observations, dry-run via `POST /sandbox/execute`, record observation; auto-conclude when threshold reached |
+| 17 | World model grower | Daily 6:53 | Scan `GET /conversation/recent?hours=24`; detect 2+ mentions of same topic/entity/behavior; `POST /worldmodel`; auto-insert entity rows for people, projects, and places |
+| 18 | Auto-audit | 3×/day (8:19, 14:19, 20:19) | Integrity scan: empty reflections, worldmodel with zero occurrences, memories without description, core tables stale > 7 days, capabilities with fail rate > 50%, overdue predictions; error → alert user; improvement opportunity → proposal |
+
 ## Planned Surface Design Notes
 
 Concrete design decisions from the Friday reference implementation worth
