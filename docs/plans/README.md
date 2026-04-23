@@ -15,4 +15,4 @@ This directory is for active implementation planning.
 
 ## Current Planning Documents
 
-- `harness-v2-bridge-primitives.md` (completed implementation record)
+No active plans. Create a new plan document here when scoping post-Phase-3 feature work.

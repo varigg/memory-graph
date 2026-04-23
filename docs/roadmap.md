@@ -91,7 +91,7 @@ Recommended next steps in priority order:
 
 1. ~~Transactional write guarantees~~ **Implemented** (2026-04-21)
 2. ~~Explicit retrieval profiles~~ **Implemented** (2026-04-22)
-3. ~~Bridge primitives M1-M3~~ **In progress** — merge after M4 fixes; see `docs/plans/harness-v2-bridge-primitives.md`
+3. ~~Bridge primitives M1-M4~~ **Implemented** (2026-04-22)
 4. Session recovery validation — verify the bootstrap flow (snapshot recall + cron reconciliation) works end-to-end with a real autonomous session
 
 Additional future work, only when justified by concrete operational need:
