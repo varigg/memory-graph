@@ -9,7 +9,7 @@ from storage.autonomy_checkpoint_repository import (
 )
 from storage.goal_repository import get_goal_by_id
 
-_ACTION_TERMINAL_STATUSES = {"succeeded", "failed", "rolled_back"}
+from services._constants import ACTION_TERMINAL_STATUSES
 
 
 def create_or_get_autonomy_checkpoint(db: sqlite3.Connection, payload: dict):
@@ -69,7 +69,7 @@ def create_or_get_autonomy_checkpoint(db: sqlite3.Connection, payload: dict):
             if (
                 payload["verdict"] == "denied"
                 and linked_action is not None
-                and linked_action["status"] not in _ACTION_TERMINAL_STATUSES
+                and linked_action["status"] not in ACTION_TERMINAL_STATUSES
             ):
                 complete_action_log(db, action_id=action_id, status="failed")
     except sqlite3.IntegrityError:

@@ -10,7 +10,7 @@ from storage.action_log_repository import (
 )
 from storage.goal_repository import get_goal_by_id
 
-_TERMINAL_STATUSES = {"succeeded", "failed", "rolled_back"}
+from services._constants import ACTION_TERMINAL_STATUSES
 
 
 def create_or_get_action_log(db: sqlite3.Connection, payload: dict) -> dict:
@@ -101,7 +101,7 @@ def complete_action_log_entry(
     observed_result: str = None,
     rollback_action_id: int = None,
 ):
-    if status not in _TERMINAL_STATUSES:
+    if status not in ACTION_TERMINAL_STATUSES:
         return None, "invalid_status"
 
     existing = get_action_log_by_id(db, action_id)
@@ -111,7 +111,7 @@ def complete_action_log_entry(
         return None, "forbidden"
 
     current_status = existing["status"]
-    if current_status in _TERMINAL_STATUSES:
+    if current_status in ACTION_TERMINAL_STATUSES:
         if current_status != status:
             return None, "invalid_transition"
         return {"id": action_id, "status": status}, None

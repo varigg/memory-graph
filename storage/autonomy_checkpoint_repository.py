@@ -1,14 +1,6 @@
-import json
 import sqlite3
 
-def _deserialize_json_object(raw_value: str):
-    if not raw_value:
-        return {}
-    try:
-        parsed = json.loads(raw_value)
-    except (TypeError, ValueError):
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
+from storage._utils import _deserialize_json_object
 
 
 def _row_to_autonomy_checkpoint(row: sqlite3.Row) -> dict:

@@ -138,7 +138,10 @@ def complete_action_log(
 ):
     cursor = db.execute(
         "UPDATE action_logs "
-        "SET status = ?, observed_result = ?, rollback_action_id = ?, completed_at = CURRENT_TIMESTAMP "
+        "SET status = ?, "
+        "observed_result = COALESCE(?, observed_result), "
+        "rollback_action_id = COALESCE(?, rollback_action_id), "
+        "completed_at = CURRENT_TIMESTAMP "
         "WHERE id = ?",
         (status, observed_result, rollback_action_id, action_id),
     )

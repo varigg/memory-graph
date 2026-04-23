@@ -29,12 +29,6 @@ def create_autonomy_check():
         return jsonify({"error": "forbidden"}), 403
     if err == "goal_action_mismatch":
         return jsonify({"error": "action must belong to the provided goal"}), 409
-    if err == "invalid_requested_level":
-        return jsonify({"error": "requested_level must be between 0 and 5"}), 400
-    if err == "invalid_approved_level":
-        return jsonify({"error": "approved_level must be between 0 and 5"}), 400
-    if err == "approved_level_exceeds_requested":
-        return jsonify({"error": "approved_level must be <= requested_level"}), 400
 
     if result["created"]:
         return jsonify({"id": result["id"]}), 201

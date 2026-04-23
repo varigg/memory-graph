@@ -1,18 +1,9 @@
-import json
 import sqlite3
 from typing import Optional
 
+from storage._utils import _deserialize_json_object
+
 ALLOWED_GOAL_STATUSES = {"active", "blocked", "completed", "abandoned"}
-
-
-def _deserialize_json_object(raw_value: str):
-    if not raw_value:
-        return {}
-    try:
-        parsed = json.loads(raw_value)
-    except (TypeError, ValueError):
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
 
 
 def _row_to_goal(row: sqlite3.Row) -> dict:
