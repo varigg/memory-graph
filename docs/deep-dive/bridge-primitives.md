@@ -153,12 +153,13 @@ Checkpoints are stored in the `autonomy_checkpoints` table:
 
 ### Invariants
 
-- Checkpoints are write-and-audit-only. They do not enforce policy at
-  runtime — the Claude Code runtime evaluates the verdict and decides
-  whether to proceed. The checkpoint records that the decision was made
-  and what the rationale was.
-- `verdict=denied` does not prevent the action at the service layer.
-  The agent is responsible for respecting the verdict.
+- Checkpoints record gate decisions for audit; they do not own policy
+  enforcement. The Claude Code runtime is responsible for acting on the
+  verdict.
+- When `verdict=denied` and the checkpoint is linked to an action that is
+  not yet in a terminal state, the service atomically marks that action
+  as `failed` in the same write. This is the one side-effect the service
+  applies on a blocking verdict.
 - `approved_level` must not exceed `requested_level`; the service
   rejects invalid combinations.
 - `stop_conditions_json` is stored as a JSON string and deserialized to

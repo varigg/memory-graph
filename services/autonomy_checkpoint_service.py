@@ -1,26 +1,21 @@
 import sqlite3
 
 from db_utils import write_transaction
-from storage.action_log_repository import get_action_log_by_id
+from storage.action_log_repository import complete_action_log, get_action_log_by_id
 from storage.autonomy_checkpoint_repository import (
-    ALLOWED_AUTONOMY_REVIEWER_TYPES,
-    ALLOWED_AUTONOMY_VERDICTS,
     get_autonomy_checkpoint_by_idempotency_key,
     insert_autonomy_checkpoint,
     list_autonomy_checkpoints,
 )
 from storage.goal_repository import get_goal_by_id
 
+_ACTION_TERMINAL_STATUSES = {"succeeded", "failed", "rolled_back"}
+
 
 def create_or_get_autonomy_checkpoint(db: sqlite3.Connection, payload: dict):
     owner_agent_id = payload["owner_agent_id"]
     goal_id = payload["goal_id"]
     action_id = payload["action_id"]
-
-    if payload["verdict"] not in ALLOWED_AUTONOMY_VERDICTS:
-        return None, "invalid_verdict"
-    if payload["reviewer_type"] not in ALLOWED_AUTONOMY_REVIEWER_TYPES:
-        return None, "invalid_reviewer_type"
 
     requested_level = payload["requested_level"]
     approved_level = payload["approved_level"]
@@ -38,13 +33,14 @@ def create_or_get_autonomy_checkpoint(db: sqlite3.Connection, payload: dict):
         if goal["owner_agent_id"] != owner_agent_id:
             return None, "forbidden_goal"
 
+    linked_action = None
     if action_id is not None:
-        action = get_action_log_by_id(db, action_id)
-        if action is None:
+        linked_action = get_action_log_by_id(db, action_id)
+        if linked_action is None:
             return None, "action_not_found"
-        if action["owner_agent_id"] != owner_agent_id:
+        if linked_action["owner_agent_id"] != owner_agent_id:
             return None, "forbidden_action"
-        if goal_id is not None and action["goal_id"] != goal_id:
+        if goal_id is not None and linked_action["goal_id"] != goal_id:
             return None, "goal_action_mismatch"
 
     idempotency_key = payload["idempotency_key"]
@@ -70,6 +66,12 @@ def create_or_get_autonomy_checkpoint(db: sqlite3.Connection, payload: dict):
                 run_id=payload["run_id"],
                 idempotency_key=idempotency_key,
             )
+            if (
+                payload["verdict"] == "denied"
+                and linked_action is not None
+                and linked_action["status"] not in _ACTION_TERMINAL_STATUSES
+            ):
+                complete_action_log(db, action_id=action_id, status="failed")
     except sqlite3.IntegrityError:
         if not idempotency_key:
             raise

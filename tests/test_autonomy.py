@@ -163,3 +163,60 @@ def test_list_autonomy_checkpoints_filters_by_owner(client):
     rows = resp.get_json()
     assert len(rows) == 1
     assert rows[0]["owner_agent_id"] == "agent-a"
+
+
+def test_denied_checkpoint_atomically_fails_linked_action(client):
+    goal_id = client.post("/goal", json=_goal_payload()).get_json()["id"]
+    action_id = client.post("/action-log", json=_action_payload(goal_id)).get_json()["id"]
+
+    resp = client.post(
+        "/autonomy/check",
+        json=_checkpoint_payload(goal_id=goal_id, action_id=action_id, verdict="denied", approved_level=0),
+    )
+    assert resp.status_code == 201
+
+    action = client.get(f"/action-log/list?goal_id={goal_id}").get_json()[0]
+    assert action["status"] == "failed"
+
+
+def test_sandbox_only_checkpoint_does_not_transition_linked_action(client):
+    goal_id = client.post("/goal", json=_goal_payload()).get_json()["id"]
+    action_id = client.post("/action-log", json=_action_payload(goal_id)).get_json()["id"]
+
+    resp = client.post(
+        "/autonomy/check",
+        json=_checkpoint_payload(goal_id=goal_id, action_id=action_id, verdict="sandbox_only"),
+    )
+    assert resp.status_code == 201
+
+    action = client.get(f"/action-log/list?goal_id={goal_id}").get_json()[0]
+    assert action["status"] == "running"
+
+
+def test_denied_checkpoint_without_linked_action_succeeds(client):
+    goal_id = client.post("/goal", json=_goal_payload()).get_json()["id"]
+
+    resp = client.post(
+        "/autonomy/check",
+        json=_checkpoint_payload(goal_id=goal_id, verdict="denied", approved_level=0),
+    )
+    assert resp.status_code == 201
+
+
+def test_denied_checkpoint_does_not_retransition_already_terminal_action(client):
+    goal_id = client.post("/goal", json=_goal_payload()).get_json()["id"]
+    action_id = client.post("/action-log", json=_action_payload(goal_id)).get_json()["id"]
+
+    client.post(
+        f"/action-log/{action_id}/complete",
+        json={"owner_agent_id": "agent-alpha", "status": "succeeded"},
+    )
+
+    resp = client.post(
+        "/autonomy/check",
+        json=_checkpoint_payload(goal_id=goal_id, action_id=action_id, verdict="denied", approved_level=0),
+    )
+    assert resp.status_code == 201
+
+    action = client.get(f"/action-log/list?goal_id={goal_id}").get_json()[0]
+    assert action["status"] == "succeeded"

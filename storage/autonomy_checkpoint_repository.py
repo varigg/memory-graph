@@ -1,10 +1,6 @@
 import json
 import sqlite3
 
-ALLOWED_AUTONOMY_VERDICTS = {"approved", "denied", "sandbox_only"}
-ALLOWED_AUTONOMY_REVIEWER_TYPES = {"policy", "human", "system"}
-
-
 def _deserialize_json_object(raw_value: str):
     if not raw_value:
         return {}

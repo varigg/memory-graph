@@ -201,3 +201,34 @@ def test_complete_action_log_rejects_rollback_from_different_goal(client):
 
     assert resp.status_code == 409
     assert resp.get_json()["error"] == "rollback action must belong to the same goal and owner"
+
+
+def test_complete_action_log_same_terminal_status_is_idempotent(client):
+    goal_id = client.post("/goal", json=_goal_payload()).get_json()["id"]
+    action_id = client.post(
+        "/action-log",
+        json=_action_payload(goal_id=goal_id, status="running"),
+    ).get_json()["id"]
+
+    first = client.post(
+        f"/action-log/{action_id}/complete",
+        json={
+            "owner_agent_id": "agent-alpha",
+            "status": "succeeded",
+            "observed_result": "original result",
+        },
+    )
+    assert first.status_code == 200
+
+    second = client.post(
+        f"/action-log/{action_id}/complete",
+        json={
+            "owner_agent_id": "agent-alpha",
+            "status": "succeeded",
+            "observed_result": "should not overwrite",
+        },
+    )
+    assert second.status_code == 200
+
+    listed = client.get(f"/action-log/list?goal_id={goal_id}").get_json()
+    assert listed[0]["observed_result"] == "original result"

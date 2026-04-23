@@ -2,8 +2,6 @@ import sqlite3
 
 from db_utils import write_transaction
 from storage.action_log_repository import (
-    ALLOWED_ACTION_MODES,
-    ALLOWED_ACTION_STATUSES,
     complete_action_log,
     get_action_log_by_id,
     get_action_log_by_idempotency_key,
@@ -18,11 +16,6 @@ _TERMINAL_STATUSES = {"succeeded", "failed", "rolled_back"}
 def create_or_get_action_log(db: sqlite3.Connection, payload: dict) -> dict:
     owner_agent_id = payload["owner_agent_id"]
     idempotency_key = payload["idempotency_key"]
-
-    if payload["mode"] not in ALLOWED_ACTION_MODES:
-        return None, "invalid_mode"
-    if payload["status"] not in ALLOWED_ACTION_STATUSES:
-        return None, "invalid_status"
 
     goal = get_goal_by_id(db, payload["goal_id"])
     if goal is None:
@@ -118,8 +111,10 @@ def complete_action_log_entry(
         return None, "forbidden"
 
     current_status = existing["status"]
-    if current_status in _TERMINAL_STATUSES and current_status != status:
-        return None, "invalid_transition"
+    if current_status in _TERMINAL_STATUSES:
+        if current_status != status:
+            return None, "invalid_transition"
+        return {"id": action_id, "status": status}, None
 
     if rollback_action_id is not None:
         rollback = get_action_log_by_id(db, rollback_action_id)

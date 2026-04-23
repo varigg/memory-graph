@@ -1,8 +1,5 @@
 import sqlite3
 
-ALLOWED_ACTION_MODES = {"plan", "dry_run", "live", "rollback"}
-ALLOWED_ACTION_STATUSES = {"queued", "running", "succeeded", "failed", "rolled_back"}
-
 
 def _row_to_action_log(row: sqlite3.Row) -> dict:
     return {

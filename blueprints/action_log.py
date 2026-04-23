@@ -37,11 +37,6 @@ def create_action_log():
         return jsonify({"error": "rollback action not found"}), 404
     if err == "rollback_conflict":
         return jsonify({"error": "rollback action must belong to the same goal and owner"}), 409
-    if err == "invalid_mode":
-        return jsonify({"error": "mode must be one of: plan, dry_run, live, rollback"}), 400
-    if err == "invalid_status":
-        return jsonify({"error": "status must be one of: queued, running, succeeded, failed, rolled_back"}), 400
-
     if result["created"]:
         return jsonify({"id": result["id"]}), 201
     return jsonify({"id": result["id"], "idempotent_replay": True}), 200
