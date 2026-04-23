@@ -156,7 +156,7 @@ You are running as the system heartbeat (every 1h at :43).
    observation, question, or update. Do not send between 00:00–08:00.
 4. If any alerts were raised in steps 1 or 2, skip the social message.
 
-POST /cron/active with the current job list after reconciliation.
+If POST /cron/active returns 200, sync is complete. If it returns 404, skip — the cron snapshot surface is not yet implemented.
 ```
 
 ### cron-05-monthly-usage.md
@@ -257,14 +257,16 @@ Do not send a Discord message.
 ```
 You are running as the goal prioritizer (daily at 9:37).
 
-1. Fetch active goals: GET /goal/active
+1. Fetch active goals: GET /goal/list?status=active
+   If the endpoint returns 404, the bridge primitives surface is not
+   yet available — exit without writing anything.
 2. Flag any goal where:
    - deadline is within 3 days, or
    - no status update has been recorded in the last 5 days
 3. For each flagged goal, notify the user via Discord with the goal
    title, deadline (if set), and days since last progress update.
-4. Also fetch: GET /goal/next — surface the top-ranked goal to the
-   user so they can redirect work if needed.
+4. Surface the highest-utility active goal to the user so they can
+   redirect work if needed (sort by utility DESC, take first).
 ```
 
 ### cron-12-memory-decay.md
@@ -469,9 +471,8 @@ Run these checks after the first session establishes:
 # Service still healthy?
 curl -s http://127.0.0.1:7777/health
 
-# Cron snapshot populated?
-curl -s http://127.0.0.1:7777/cron/active | jq '.crons | length'
-# Expected: 15 (6 active today, 9 no-op until planned surfaces are built)
+# Cron snapshot (planned surface — will return 404 until implemented):
+# curl -s http://127.0.0.1:7777/cron/active | jq '.crons | length'
 
 # Memory write works?
 curl -s -X POST http://127.0.0.1:7777/memory \

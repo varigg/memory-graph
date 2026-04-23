@@ -24,13 +24,17 @@ to any messages:
    `~/.claude/prompts/`. Recreate any missing crons using CronCreate
    with the content of the corresponding prompt file.
 
-2. **Sync cron snapshot**
+2. **Sync cron snapshot** *(planned surface — skip if endpoint returns 404)*
 
    ```bash
    curl -s -X POST http://127.0.0.1:7777/cron/active \
      -H "Content-Type: application/json" \
-     -d '{"crons": [<current job list>]}'
+     -d "$(jq -n --argjson crons "$CRON_LIST" '{crons: $crons}')"
    ```
+
+   `$CRON_LIST` is a JSON array of `{job_id, label, cron_expr, prompt_preview}`
+   objects built from the currently active cron jobs. If the endpoint returns
+   404, skip this step — the surface is not yet implemented.
 
 3. **Resume open goals** — the active goals list is in your injected
    context. Continue any in-progress work from the previous session.
