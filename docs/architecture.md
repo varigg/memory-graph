@@ -1,10 +1,11 @@
 # Architecture
 
-This document describes the current architectural shape of Memory Graph, why it
-exists in this form, and which boundaries are now implemented versus still
+This document describes the current architectural shape of Memory Graph, why
+it exists in this form, and which boundaries are now implemented versus still
 evolving.
 
 Use this file for the current-state architecture narrative.
+Use `docs/vision.md` for the overall system vision including Claude's role.
 Use `docs/deep-dive/` for subsystem-level implementation state and invariants.
 Use the ADRs in `docs/adr/` for durable decision records.
 Use `docs/roadmap.md` for implementation status.
@@ -15,7 +16,7 @@ The repository already has strong phase summaries, backlog notes, and an
 outcomes ledger, but it was missing a single document that answered these
 questions clearly:
 
-- What is the system, architecturally?
+- What is the service, architecturally?
 - What are the main runtime and code boundaries?
 - Why is it one service instead of multiple targeted services?
 - How should future work preserve or evolve those boundaries?
@@ -24,49 +25,37 @@ This file is the answer to those questions.
 
 ## Current System Role
 
-Memory Graph is currently a **local-first memory substrate** for agentic
-workflows.
+Memory Graph is a **local-first persistence substrate** for Claude Code-based
+agent workflows.
 
-It is not yet the full harness runtime described in `harness.md`.
-It is also no longer only a single-agent backend.
-It now serves two closely related usage modes:
+The cognitive runtime is Claude Code itself — a long-running session that
+plans, decides, and acts. Memory Graph holds the durable state that must
+survive beyond a single session: memories, goals, action logs, autonomy
+checkpoints, conversation history, and embeddings.
 
-- a **continuously running autonomous agent** that benefits from conservative,
+The service has two client modes:
+
+- an **autonomous Claude Code agent** that benefits from conservative,
   low-noise retrieval and restart-safe write discipline
 - **general local agents** that benefit from broader shared recall and lighter
   operational constraints
 
-The important architectural conclusion is that these use cases still share the
-same storage, indexing, and lifecycle primitives. The divergence is primarily in
-**retrieval policy**, not in persistence model or deployment topology.
-
-For harness v2, this repository should move as quickly as possible toward the
-durable substrate that the harness depends on, without prematurely absorbing the
-goal engine, planner, world model, experiment system, or other cognition-layer
-subsystems described in `harness.md`.
+These use cases share the same storage, indexing, and lifecycle primitives.
+The divergence is in **retrieval policy**, not in persistence model or
+deployment topology.
 
 ## Architectural Position
 
-The service should remain **one deployable local service with one database**,
-while making retrieval and write policy more explicit.
+The service is **one deployable local service with one database**. Retrieval
+and write policy are made explicit through profiles and service-layer rules
+rather than through a deployment split.
 
-The current architectural direction is:
+The current architectural direction:
 
-- one shared SQLite-backed memory engine
+- one shared SQLite-backed store
 - one HTTP service surface
-- explicit retrieval profiles for different agent modes
-- a clean separation between current substrate responsibilities and deferred
-  harness runtime responsibilities
-
-This keeps the core durable and simple while preventing client behavior from
-implicitly defining the system contract.
-
-The fastest non-shortcut path to harness v2 is therefore:
-
-- finish the substrate invariants the harness will rely on
-- make retrieval behavior explicit for autonomous versus general clients
-- add only the smallest harness-facing primitives that need to live beside the
-  memory substrate
+- explicit retrieval profiles for different client modes
+- clean layer boundaries between transport, domain, and storage concerns
 
 ## Core Building Blocks
 
@@ -78,115 +67,98 @@ Flask blueprints provide the HTTP surface for:
 - memory CRUD and lifecycle
 - search and embeddings
 - KV and utility endpoints
+- goals, action logs, and autonomy checkpoints (bridge primitives — in progress, pending M4 merge)
 
-After the service-layer refactor, these handlers are intentionally thin
-transport adapters. Shared request parsing lives in `blueprints/_params.py`,
-while lifecycle, retrieval, write orchestration, and hybrid ranking behavior
-live outside the blueprints.
+These handlers are intentionally thin transport adapters. Shared request
+parsing lives in `blueprints/_params.py`. Lifecycle, retrieval, write
+orchestration, and hybrid ranking live in the service layer.
 
 ### 2. Storage Layer
 
 SQLite is the source of truth for:
 
 - conversations
-- memories
+- memories and memory relations
 - entities
 - embeddings
 - key-value state
-- lifecycle relations
+- goals, goal status history, action logs, and autonomy checkpoints (bridge primitives — in progress, pending M4 merge)
 
 FTS5 and embedding-based retrieval are both implemented on top of this local
-store.
-
-Repository modules under `storage/` now own SQL construction, row mapping, and
-table-specific persistence helpers.
+store. Repository modules under `storage/` own SQL construction, row mapping,
+and table-specific persistence helpers.
 
 ### 3. Retrieval Layer
 
-The system currently supports:
+The system supports:
 
-- lexical recall through FTS
+- lexical recall through FTS5
 - semantic search through embeddings
-- hybrid ranking
-- memory filters for visibility, ownership, lifecycle status, task/run context,
-  recency, confidence, and metadata
+- hybrid ranking (RRF)
+- memory filters for visibility, ownership, lifecycle status, task/run
+  context, recency, confidence, and metadata
+- explicit retrieval profiles (`profile=general|autonomous`)
 
-This is the main area where the architecture needs clearer policy boundaries.
-The system has enough primitives, but the default retrieval contract is still
-too implicit.
-
-Retrieval orchestration is now separated from raw SQL. `services/` owns scoped
-versus unscoped dispatch, hybrid-ranking orchestration, lifecycle rules, and
-write-path normalization, while `storage/` owns the underlying queries.
+Retrieval orchestration lives in `services/`. The storage layer owns raw
+queries; the service layer owns profile dispatch, scoping rules, and ranking
+behavior.
 
 ### 4. Lifecycle and Trust Layer
 
 Memory rows carry operational semantics beyond simple CRUD:
 
-- visibility
-- ownership
-- lifecycle status
-- verification status
-- run tracking
+- visibility (shared/private)
+- ownership (`owner_agent_id`)
+- lifecycle status (active/archived/invalidated)
+- verification status (unverified/verified/disputed)
+- run tracking (`run_id`)
 - idempotency keys
 - tags and metadata
 
-This is what makes the service useful for long-running agent workflows rather
-than only as a generic note store.
+Goal, action-log, and autonomy-checkpoint records extend this with
+structured lifecycle semantics for auditable agent operations.
 
-Near-term harness v2 work should prefer extending this layer with auditable
-bridge records and stable write semantics before adding broader runtime control
-surfaces.
-
-## Intended Retrieval Modes
-
-The current code evolved from a single-agent design toward shared usage by
-multiple local agents. The recommended model is to formalize that evolution into
-two retrieval modes.
+## Retrieval Modes
 
 ### Autonomous Mode
 
-Use when the client is a continuously running or restart-sensitive agent.
+For the long-running Claude Code agent.
 
-Desired defaults:
+Defaults:
 
 - `status=active`
 - stronger recency and confidence bias
 - preference for run/task-local memories when available
 - smaller result sets
-- optional duplicate/result collapse to reduce prompt pollution
 - safer defaults that reduce accidental broad recall
 
 ### General Mode
 
-Use when the client is a local exploratory agent or operator-driven workflow.
+For exploratory or operator-driven Claude Code sessions.
 
-Desired defaults:
+Defaults:
 
 - broader shared recall
 - looser filtering
 - less aggressive narrowing
 - useful for ad hoc lookup and discovery
 
-These are **retrieval profiles**, not separate systems.
+These are retrieval profiles, not separate services.
 
-## Why Not Split Into Two Services Now
+## Why Not Split Into Two Services
 
-The codebase should not be split into separate autonomous-agent and general-agent
-services yet.
+One service remains the right call because both client modes rely on:
 
-That split would currently duplicate or entangle:
+- shared schema evolution
+- shared indexing and embeddings
+- shared lifecycle state transitions
+- shared memory ranking logic
+- shared compaction and deduplication behavior
+- shared observability and maintenance tooling
 
-- schema evolution
-- indexing and embeddings
-- lifecycle state transitions
-- memory ranking logic
-- compaction and deduplication behavior
-- observability and maintenance tooling
-
-The use cases do not yet justify separate persistence, availability, or trust
-boundaries. The divergence is mainly in **how clients should retrieve and rank
-data**, which is cheaper and cleaner to express as policy within one service.
+The use cases do not justify separate persistence, availability, or trust
+boundaries. The divergence is in how clients retrieve data, which is cheaper
+to express as retrieval policy within one service.
 
 If the system later needs two surfaces, the safer path is:
 
@@ -194,111 +166,68 @@ If the system later needs two surfaces, the safer path is:
 - one shared datastore
 - two thin API surfaces or endpoint families
 
-That is a code-boundary refactor first, not a storage or deployment split.
+That is a code-boundary refactor, not a storage or deployment split.
 
 ## Current Code Boundaries
 
-The service-layer refactor is now in place. The current internal boundary model
-is:
-
 ### Transport Adapters
 
-Blueprints should focus on:
+Blueprints own:
 
 - request parsing
 - response formatting
 - HTTP status selection
 
-This boundary is implemented in `blueprints/`, with repeated query-parameter
-parsing consolidated into `blueprints/_params.py`.
+Implemented in `blueprints/`, with repeated query-parameter parsing
+consolidated into `blueprints/_params.py`.
 
 ### Domain Services
 
-Service modules should own:
+Service modules own:
 
 - retrieval policy selection
 - lifecycle rules
 - ranking behavior
 - authorization and visibility semantics
 - idempotency and batch-write orchestration
+- ownership validation for goal/action/checkpoint resources
 
-This boundary is implemented in `services/` via dedicated modules for memory
-write, lifecycle, retrieval, and hybrid search behavior.
+Implemented in `services/`.
 
 ### Repository / Query Helpers
 
-Database modules should own:
+Storage modules own:
 
 - SQL construction
 - row mapping
 - transaction boundaries
-- connection/session initialization
 
-This boundary is implemented primarily in `storage/`. Connection acquisition
-still flows through `db_utils.get_db()`, and schema/migration ownership remains
-in `db_schema.py`.
+Implemented in `storage/`. Connection acquisition flows through
+`db_utils.get_db()`. Schema and migration ownership stays in `db_schema.py`.
 
-The remaining architectural work is no longer to create these layers. It is to
-keep them narrow, preserve dependency direction, and avoid policy drift back
-into the blueprints.
-
-## Relationship To Harness
-
-`harness.md` remains the target-state design for a broader autonomous runtime.
-
-Memory Graph should currently be treated as:
-
-- the memory substrate
-- a partial lifecycle and trust substrate
-- a useful local retrieval service
-
-It should not yet be treated as the full orchestrator or runtime controller.
-
-That boundary matters because it prevents premature growth of this service into a
-planner, scheduler, world model, or autonomy engine before the memory substrate
-is fully stable.
-
-The practical implication is that harness v2 should first consume Memory Graph as
-an audited storage and retrieval backend. The first integration steps should be
-minimal bridge primitives such as goal/action-log/autonomy-checkpoint records or
-other narrow surfaces that are clearly shared substrate concerns. Goal ranking,
-plan execution, learning loops, experiments, and broader runtime policy should
-remain in the harness unless repeated usage proves they belong here.
-
-The concrete implementation plan for that first bridge slice lives in
-`docs/plans/harness-v2-bridge-primitives.md`.
+The architectural work is no longer to create these layers. It is to keep
+them narrow, preserve dependency direction, and avoid policy drift back into
+the blueprints.
 
 ## Documentation Strategy
 
-The recommended documentation model is a **mix**, not a single monolithic file
-and not a retroactive ADR for every historical detail.
-
-- `docs/architecture.md` explains the current system shape and design intent.
-- `docs/deep-dive/` captures subsystem-level implemented behavior and
-  invariants that should stay useful after plans are complete.
-- `docs/adr/` captures durable architecture decisions that should remain stable
-  over time.
-- `docs/conversation-outcomes.md` remains the discussion outcome ledger.
-- `docs/roadmap.md` remains the status tracker.
-- `docs/plans/` is for active implementation planning only; once a plan's
-  durable implementation details are promoted into `docs/deep-dive/` or other
-  canonical docs, the completed plan should be removed.
-
-This avoids two failure modes:
-
-- one document that becomes a catch-all dumping ground
-- a large set of backfilled ADRs that read like reconstructed history rather
-  than real decisions
+- `docs/vision.md` explains the overall system goal including Claude's role.
+- `docs/architecture.md` (this file) explains the service shape and design intent.
+- `docs/deep-dive/` captures subsystem-level implemented behavior and invariants.
+- `docs/adr/` captures durable architecture decisions.
+- `docs/conversation-outcomes.md` is the discussion outcome ledger.
+- `docs/roadmap.md` is the implementation status tracker.
+- `docs/plans/` is for active implementation planning only; once complete,
+  durable details should be promoted into `docs/deep-dive/` or other
+  canonical docs.
 
 ## Near-Term Architectural Priorities
 
 1. Keep retrieval profile behavior stable and explicit across memory read
-   endpoints (`profile=general|autonomous`) as additional read surfaces evolve.
+   endpoints as additional read surfaces evolve.
 2. Keep service-owned transaction boundaries consistent for multi-step write
    flows and avoid reintroducing repository-level implicit commits.
-3. Add the minimum harness-facing bridge primitives needed for v2 integration
-   only after retrieval and write invariants are reliable.
-4. Add stronger isolation-friendly seams and focused unit tests around service
-   modules where they directly improve harness integration safety.
-5. Keep broader harness runtime concerns out of this service unless there is a
-   deliberate decision to expand beyond the substrate role.
+3. Extend the goal/action-log/autonomy-checkpoint surfaces (M4 polish) to
+   complete the bridge primitives the autonomous agent depends on.
+4. Keep broader runtime concerns — planning, scheduling, skill execution,
+   autonomy policy — in Claude Code rather than absorbing them into the service.
