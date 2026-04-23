@@ -228,29 +228,6 @@ Risk tiers: `low`, `medium`, `high`, `critical`.
 
 ---
 
-## Session End
-
-Before a session ends or restarts, write a snapshot memory so the next
-session can recover context:
-
-```bash
-curl -s -X POST http://127.0.0.1:7777/memory \
-  -H "Content-Type: application/json" \
-  -d "$(jq -n \
-        --arg run "$RUN_ID" \
-        --arg content "..." \
-        '{name:"session_snapshot", type:"project",
-          content:$content, description:"End-of-session context snapshot",
-          visibility:"private", owner_agent_id:"autonomous",
-          run_id:$run, tags:["snapshot"]}')"
-```
-
-The `content` field should summarise: open goals, last action taken,
-any decisions made, and anything the next session needs to know to
-resume without loss.
-
----
-
 ## Entities and Key-Value State
 
 For persistent identity records (people, projects, places):
@@ -274,6 +251,23 @@ curl -s http://127.0.0.1:7777/kv/my_key
 ```
 
 ---
+
+## Session Recovery Model
+
+Session recovery is built on the **continuous write trail**, not on a
+terminal flush. The session can be killed at any point — by crash,
+context exhaustion, or external signal — with no opportunity to write
+a farewell snapshot. Restart recovery works because state is
+externalized throughout execution:
+
+- a goal is recorded when a task begins
+- plan-node status is updated as steps complete
+- each significant action is logged as it is taken
+- memories are written as facts are learned
+
+The heartbeat cron (every 1h) is the appropriate vehicle for periodic
+context snapshots, since it runs on a schedule independent of session
+termination. Do not rely on "before session ends" as a write trigger.
 
 ## Golden Rule
 
