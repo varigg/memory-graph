@@ -40,7 +40,7 @@ cp ~/code/memory-graph/agent/CLAUDE.md ~/.claude/CLAUDE.md
 
 `agent/CLAUDE.md` is the authoritative source for the agent's operational
 instructions. It covers the currently implemented service surface plus
-bridge primitives (goals, action logs, autonomy checkpoints). As new
+agent operation surfaces (goals, action logs, autonomy checkpoints). As new
 service surfaces are implemented, update `agent/CLAUDE.md` and re-run
 this copy step.
 
@@ -258,7 +258,7 @@ Do not send a Discord message.
 You are running as the goal prioritizer (daily at 9:37).
 
 1. Fetch active goals: GET /goal/list?status=active
-   If the endpoint returns 404, the bridge primitives surface is not
+   If the endpoint returns 404, the agent operation surfaces are not
    yet available — exit without writing anything.
 2. Flag any goal where:
    - deadline is within 3 days, or

@@ -48,7 +48,7 @@ as writes, so partial replay artifacts are avoided.
 non-committing (`insert_memory`, `delete_memories_by_ids`). This prevents
 repository-level implicit commits from breaking service-owned atomicity.
 
-## Bridge Primitive Atomicity
+## Agent Operation Surface Atomicity
 
 Goal creation and status history, action log completion, and autonomy
 checkpoint creation all follow the same ownership model.
@@ -58,4 +58,4 @@ checkpoint creation all follow the same ownership model.
 - `POST /action-log/<id>/complete` — single UPDATE on the action log row; no multi-step transaction needed.
 - `POST /autonomy/check` — always uses `write_transaction`; when `verdict=denied` and the linked action is non-terminal, the checkpoint insert and the action `failed` transition are committed together or not at all.
 
-Bridge primitive idempotency keys follow the same replay semantics as memory writes: `owner_agent_id + idempotency_key` defines replay identity; a duplicate create returns the existing record without mutation.
+Agent operation surface idempotency keys follow the same replay semantics as memory writes: `owner_agent_id + idempotency_key` defines replay identity; a duplicate create returns the existing record without mutation.

@@ -1,16 +1,16 @@
-"""Integration checks for the harness bridge primitives (M1-M4) with M4 polish assertions."""
+"""Integration checks for the agent operation surfaces with end-to-end flow assertions."""
 
 
-def test_harness_bridge_end_to_end_flow(client):
+def test_agent_operation_end_to_end_flow(client):
     goal_resp = client.post(
         "/goal",
         json={
-            "title": "Ship bridge",
+            "title": "Ship feature",
             "owner_agent_id": "agent-alpha",
             "status": "active",
             "constraints": {"budget": "local"},
             "success_criteria": {"result": "integration-green"},
-            "run_id": "run-harness-bridge-int",
+            "run_id": "run-agent-op-int",
         },
     )
     assert goal_resp.status_code == 201
@@ -30,7 +30,7 @@ def test_harness_bridge_end_to_end_flow(client):
             "mode": "dry_run",
             "status": "running",
             "owner_agent_id": "agent-alpha",
-            "run_id": "run-harness-bridge-int",
+            "run_id": "run-agent-op-int",
         },
     )
     assert action_resp.status_code == 201
@@ -47,12 +47,12 @@ def test_harness_bridge_end_to_end_flow(client):
             "owner_agent_id": "agent-alpha",
             "stop_conditions": {"max_steps": 1},
             "reviewer_type": "system",
-            "run_id": "run-harness-bridge-int",
+            "run_id": "run-agent-op-int",
         },
     )
     assert checkpoint_resp.status_code == 201
 
-    checks = client.get("/autonomy/check/list?run_id=run-harness-bridge-int")
+    checks = client.get("/autonomy/check/list?run_id=run-agent-op-int")
     assert checks.status_code == 200
     check_rows = checks.get_json()
     assert len(check_rows) == 1
@@ -70,7 +70,7 @@ def test_harness_bridge_end_to_end_flow(client):
     )
     assert complete_resp.status_code == 200
 
-    actions = client.get(f"/action-log/list?goal_id={goal_id}&run_id=run-harness-bridge-int")
+    actions = client.get(f"/action-log/list?goal_id={goal_id}&run_id=run-agent-op-int")
     assert actions.status_code == 200
     action_rows = actions.get_json()
     assert len(action_rows) == 1

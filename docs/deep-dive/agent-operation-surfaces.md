@@ -1,7 +1,7 @@
-# Bridge Primitives
+# Agent Operation Surfaces
 
 This document describes the implemented behavior and invariants of the
-three bridge primitive surfaces: goals, action logs, and autonomy
+three agent operation surfaces: goals, action logs, and autonomy
 checkpoints.
 
 Use `docs/architecture.md` for the system boundary narrative.
@@ -10,11 +10,11 @@ Use `docs/adr/` for durable boundary decisions.
 
 ## Purpose
 
-Bridge primitives are the minimal durable record surfaces the autonomous
-Claude Code agent needs for auditable, restart-safe operation. They are
-intentionally narrow: they record what the agent decided and did, but
-they do not own goal ranking, plan execution, or autonomy policy logic.
-Those responsibilities remain in the Claude Code runtime.
+Agent operation surfaces are the minimal durable record surfaces the
+autonomous Claude Code agent needs for auditable, restart-safe operation.
+They are intentionally narrow: they record what the agent decided and
+did, but they do not own goal ranking, plan execution, or autonomy policy
+logic. Those responsibilities remain in the Claude Code runtime.
 
 ## Goals
 
@@ -190,9 +190,9 @@ autonomous agent is expected to scope its own queries.
 
 ## Service Boundary
 
-Bridge primitives are durable substrate records. Goal ranking, plan
-execution control, world-model reasoning, skill promotion, and
+Agent operation surfaces are durable substrate records. Goal ranking,
+plan execution control, world-model reasoning, skill promotion, and
 autonomy-level policy all remain outside this service in the Claude Code
-runtime. Bridge primitives grow only when the runtime demonstrates a
+runtime. These surfaces grow only when the runtime demonstrates a
 concrete need for a durable audit or recovery record that the current
 surfaces cannot satisfy.

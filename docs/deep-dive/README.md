@@ -17,7 +17,7 @@ sequenced.
   visibility/ownership rules, and verification model.
 - `operations-and-maintenance.md` - operational metrics, integrity checks,
   SQLite maintenance helpers, and cleanup flows.
-- `bridge-primitives.md` - goals, action logs, and autonomy checkpoints:
+- `agent-operation-surfaces.md` - goals, action logs, and autonomy checkpoints:
   schemas, endpoints, invariants, and transaction guarantees.
 
 ## Relationship To Plans

@@ -27,7 +27,7 @@ The major outcome is a memory service that now supports:
 - signal-aware batch writes and usefulness metrics
 - request correlation and operational maintenance tooling
 
-Phase 3 deliberately stopped short of building the harness bridge or a full
+Phase 3 deliberately stopped short of building agent operation surfaces or a full
 goal/autonomy runtime. Those are post-Phase-3 concerns and now belong to
 separate feature planning.
 
@@ -47,7 +47,7 @@ These assumptions explain several key decisions:
 - operational visibility was implemented as lightweight local metrics instead of
   queueing, alerting, or distributed systems machinery
 - maintenance helpers were added only when they solved concrete local problems
-- harness-bridge primitives were deferred because they expand system scope more
+- agent operation surfaces were deferred because they expand system scope more
   than they improve the current substrate role
 
 ## Why Phase 3 Existed
@@ -229,7 +229,7 @@ Rationale:
 
 - the current repository has clear value as a local-first memory service
 - autonomy runtime concerns would significantly expand system boundaries
-- planning and roadmap updates now explicitly place harness-bridge work after
+- planning and roadmap updates now explicitly place agent operation surface work after
   Phase 3 rather than treating it as a required closing sprint
 
 ### 2. Thin Blueprints, Service/Repository Split
@@ -317,7 +317,7 @@ The repository now provides:
 
 The following work is explicitly not part of completed Phase 3:
 
-- harness bridge primitives
+- agent operation surfaces
 - full harness runtime
 - broader autonomy runtime features
 - authn/authz expansion beyond local owner checks
