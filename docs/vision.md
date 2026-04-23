@@ -262,6 +262,134 @@ which also boosts confidence by +0.1 (capped at 1.0). Decay runs across
 memories, entities, and world model rows using `last_verified` timestamp,
 falling back to `updated_at`.
 
+### Soft world model and graduation flow
+
+Soft observations land in `world_model` via `POST /worldmodel` with
+`{category, pattern, evidence, confidence}`. When a row's pattern and
+category match an existing row, occurrences increments and confidence
+gets a small boost rather than inserting a duplicate. Query active
+observations via `GET /worldmodel/active` (non-expired, confidence ≥ 0.4,
+not yet promoted).
+
+When a soft observation earns structure — causality, testability, or
+S-P-O form — promote it via `POST /worldmodel/<id>/promote`. The source
+row is retained as an audit chain; the structured record is written to
+the appropriate `wm_*` table. This is the graduation flow:
+
+```
+world_model (soft) → promote → wm_events / wm_relations / wm_predictions
+```
+
+### Structured world model
+
+Four tables for typed world-model facts, all distinct from the soft
+`world_model` layer:
+
+- **`wm_entities`** — current state of a thing (decays); fields: `name`,
+  `type`, `state`, `attributes` (JSON), `confidence`. Distinguished from
+  `entities` (which records stable identity) by mutability and decay.
+- **`wm_relations`** — subject-predicate-object facts; fields: `subject`,
+  `predicate`, `object`, `confidence`, `evidence`.
+- **`wm_events`** — causal events; fields: `event_type`, `actor`, `target`,
+  `payload` (JSON), `causes` (JSON array), `effects` (JSON array), `occurred_at`.
+- **`wm_predictions`** — see World model predictions section above.
+
+### Table ownership decision matrix
+
+| Need to record...                              | Table            | Endpoint            |
+|------------------------------------------------|------------------|---------------------|
+| Who/what something IS (stable identity)        | `entities`       | `/entity`           |
+| Current STATE of something (decays over time)  | `wm_entities`    | `/wm/entity`        |
+| Loose pattern just noticed                     | `world_model`    | `/worldmodel`       |
+| Testable future claim                          | `wm_predictions` | `/wm/prediction`    |
+| Subject-predicate-object knowledge             | `wm_relations`   | `/wm/relation`      |
+| Causal event (with causes/effects)             | `wm_events`      | `/wm/event`         |
+
+### Three-layer memory views
+
+Read-only projection endpoints over existing tables — not new storage:
+
+- **`GET /memory/episodic?hours=`** — what happened, when; joins
+  conversations and `wm_events` windowed by recency.
+- **`GET /memory/semantic?type=`** — stable facts; joins memories and
+  entities with provenance and confidence.
+- **`GET /memory/procedural`** — skills with preconditions, tools,
+  maturity state, and success rate.
+
+### Self-evolving surfaces (reflections, preferences, insights, proposals)
+
+These surfaces predate the v2 harness and support the agent's ongoing
+operational self-improvement:
+
+- **Reflections** — structured summaries of patterns, mistakes, and
+  insights written by the reflection cron. Fields: `content`, `patterns`,
+  `mistakes`, `insights`. Read via `GET /reflection/recent` and
+  `/reflection/list`.
+- **Preferences** — inferred behavioral rules with `rule`, `source_count`,
+  and `confidence`. Active preferences (confidence ≥ 0.7) are loaded at
+  session start and shape behavior. Written by the preference learning cron.
+- **Insights** — typed observations (`type`, `pattern`, `evidence`,
+  `confidence`) derived from reflections and world model analysis. Active
+  insights are surfaced via `GET /insight/active`.
+- **Proposals** — code or configuration improvement suggestions created by
+  the agent via `POST /proposal` with `{file_path, change_type, description,
+  diff_preview}`. The agent never applies changes directly; it proposes and
+  waits for user approval. `GET /proposal/pending` surfaces the review queue.
+  Approved proposals drive the preference learning and self-improvement loop.
+
+### Cron snapshot endpoints
+
+Two endpoints support the Crons dashboard tab and bootstrap reconciliation:
+
+- **`POST /cron/active`** — replaces the runtime cron snapshot with the
+  current job list `{crons: [{job_id, label, cron_expr, prompt_preview}]}`.
+  Called at session start after all crons are created so the dashboard can
+  show live countdowns.
+- **`GET /cron/active`** — returns the current snapshot.
+- **`GET /cron/prompts`** — parses `~/.claude/cron-prompts.md` (where
+  cron prompt files persist across restarts) into labeled sections.
+
+### Autonomy levels
+
+`GET /autonomy/levels` returns the 6-rung autonomy ladder used by
+capability and autonomy-check records:
+
+| Level | Label       | Description                                    |
+|-------|-------------|------------------------------------------------|
+| L0    | suggest     | Proposes actions; human executes               |
+| L1    | draft       | Produces artifacts; human reviews before use   |
+| L2    | execute     | Executes reversible actions autonomously       |
+| L3    | manage      | Manages multi-step workflows with checkpoints  |
+| L4    | operate     | Operates systems with post-hoc audit           |
+| L5    | self-modify | Modifies own code/prompts (requires approval)  |
+
+`autonomy_max` on a capability record is the highest level the agent is
+cleared to operate at for that capability. `POST /autonomy/check` gates
+any action above the recorded level.
+
+### Backup and restore
+
+Disaster recovery endpoints for the SQLite datastore:
+
+- **`GET /backup/info`** — DB path, size, last modified, disk free space,
+  list of pre-import backup files.
+- **`GET /backup/export`** — consistent snapshot via `VACUUM INTO`,
+  streamed as a file attachment. `?format=dump` returns a portable SQL dump.
+- **`POST /backup/import`** (form field `file`) — validates the uploaded
+  SQLite file for schema integrity, backs up the current DB as
+  `memory.db.pre-import-<timestamp>`, then swaps in the new file. Server
+  restart required to reload connections.
+
+### Importance keywords
+
+Dynamic keyword scoring drives automatic importance classification on
+conversation insert. Keywords and scores are managed via API:
+`GET /keywords`, `POST /keywords` with `{keyword, score}`,
+`DELETE /keywords/<id>`. Default scores: 1.0 (notes, saves), 0.8
+(project, deploy, commit), 0.6 (search, URLs), 0.4 (user), 0.2
+(assistant), 0.1 (system). Hit counts are tracked per keyword; the
+preference learning cron uses them to adjust scores over time.
+
 ## What Memory Graph Is Not
 
 Memory Graph is not a planner, a scheduler, a goal engine, or a world
