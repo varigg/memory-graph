@@ -169,13 +169,14 @@ Checkpoints are stored in the `autonomy_checkpoints` table:
 
 Goal creation and its initial status-history row are written atomically.
 Action completion is a single UPDATE operation on the action log row.
-Autonomy checkpoint creation is a single-row write with no dependent
-state, so no explicit transaction is needed beyond the implicit row
-insert.
+Autonomy checkpoint creation uses `write_transaction` in all cases:
+when `verdict=denied` and a non-terminal action is linked, the checkpoint
+insert and the action `failed` transition are a single atomic unit; for
+all other verdicts the transaction wraps just the checkpoint insert.
 
-All multi-step write flows use the `write_transaction` context manager
-from `db_utils.py`. See `docs/deep-dive/write-atomicity.md` for the
-full transaction model.
+All write flows use the `write_transaction` context manager from
+`db_utils.py`. See `docs/deep-dive/write-atomicity.md` for the full
+transaction model.
 
 ## Ownership and Scoping
 

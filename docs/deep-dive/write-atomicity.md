@@ -48,8 +48,14 @@ as writes, so partial replay artifacts are avoided.
 non-committing (`insert_memory`, `delete_memories_by_ids`). This prevents
 repository-level implicit commits from breaking service-owned atomicity.
 
-## Stability Notes
+## Bridge Primitive Atomicity
 
-Any future bridge primitives should reuse the same transaction ownership model:
-logical units should commit once at the service boundary and rollback as a
-whole on failure.
+Goal creation and status history, action log completion, and autonomy
+checkpoint creation all follow the same ownership model.
+
+- `POST /goal` — goal row and initial `goal_status_history` row are a single atomic unit.
+- `POST /goal/<id>/status` — status row and `updated_at` bump are a single atomic unit.
+- `POST /action-log/<id>/complete` — single UPDATE on the action log row; no multi-step transaction needed.
+- `POST /autonomy/check` — always uses `write_transaction`; when `verdict=denied` and the linked action is non-terminal, the checkpoint insert and the action `failed` transition are committed together or not at all.
+
+Bridge primitive idempotency keys follow the same replay semantics as memory writes: `owner_agent_id + idempotency_key` defines replay identity; a duplicate create returns the existing record without mutation.
