@@ -81,7 +81,10 @@ def create_app(db_path: str = None) -> Flask:
     def payload_too_large(e):
         return jsonify({"error": "Request payload too large", "request_id": getattr(g, "request_id", None)}), 413
 
+    from blueprints.action_log import bp as action_log_bp
+    from blueprints.autonomy import bp as autonomy_bp
     from blueprints.conversations import bp as conversations_bp
+    from blueprints.goals import bp as goals_bp
     from blueprints.kv import bp as kv_bp
     from blueprints.memory import bp as memory_bp
     from blueprints.search import bp as search_bp
@@ -89,6 +92,9 @@ def create_app(db_path: str = None) -> Flask:
 
     app.register_blueprint(conversations_bp, url_prefix="/conversation")
     app.register_blueprint(memory_bp)
+    app.register_blueprint(goals_bp)
+    app.register_blueprint(action_log_bp)
+    app.register_blueprint(autonomy_bp)
     app.register_blueprint(search_bp)
     app.register_blueprint(kv_bp, url_prefix="/kv")
     app.register_blueprint(utility_bp)

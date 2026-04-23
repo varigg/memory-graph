@@ -17,11 +17,13 @@ sequenced.
   visibility/ownership rules, and verification model.
 - `operations-and-maintenance.md` - operational metrics, integrity checks,
   SQLite maintenance helpers, and cleanup flows.
-- `bridge-primitives.md` - goals, action logs, and autonomy checkpoints:
+- `agent-operation-surfaces.md` - goals, action logs, and autonomy checkpoints:
   schemas, endpoints, invariants, and transaction guarantees.
 
 ## Relationship To Plans
 
 `docs/plans/` is for active implementation planning. Once a plan is
-implemented, durable outcomes should be captured here and the completed plan
-document should be removed.
+implemented, durable outcomes should be captured here and completed plan
+documents should usually be removed. A completed plan may be retained when it
+is intentionally serving as a concise implementation record referenced by
+`docs/roadmap.md`.

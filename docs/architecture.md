@@ -67,7 +67,7 @@ Flask blueprints provide the HTTP surface for:
 - memory CRUD and lifecycle
 - search and embeddings
 - KV and utility endpoints
-- goals, action logs, and autonomy checkpoints (bridge primitives — in progress, pending M4 merge)
+- goals, action logs, and autonomy checkpoints (agent operation surfaces)
 
 These handlers are intentionally thin transport adapters. Shared request
 parsing lives in `blueprints/_params.py`. Lifecycle, retrieval, write
@@ -82,7 +82,7 @@ SQLite is the source of truth for:
 - entities
 - embeddings
 - key-value state
-- goals, goal status history, action logs, and autonomy checkpoints (bridge primitives — in progress, pending M4 merge)
+- goals, goal status history, action logs, and autonomy checkpoints (agent operation surfaces)
 
 FTS5 and embedding-based retrieval are both implemented on top of this local
 store. Repository modules under `storage/` own SQL construction, row mapping,
@@ -227,7 +227,7 @@ the blueprints.
    endpoints as additional read surfaces evolve.
 2. Keep service-owned transaction boundaries consistent for multi-step write
    flows and avoid reintroducing repository-level implicit commits.
-3. Extend the goal/action-log/autonomy-checkpoint surfaces (M4 polish) to
-   complete the bridge primitives the autonomous agent depends on.
+3. Keep agent operation surfaces (goals, action logs, autonomy checkpoints)
+   stable; extend only when the autonomous agent demonstrates a concrete gap.
 4. Keep broader runtime concerns — planning, scheduling, skill execution,
    autonomy policy — in Claude Code rather than absorbing them into the service.

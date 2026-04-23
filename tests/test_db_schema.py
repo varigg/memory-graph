@@ -38,13 +38,17 @@ class TestInitCreatesAllTables:
         "memories",
         "entities",
         "embeddings",
+        "goals",
+        "goal_status_history",
+        "action_logs",
+        "autonomy_checkpoints",
         "importance_keywords",
         "fts_conversations",
         "fts_memories",
         "kv_store",
     }
 
-    def test_all_eight_tables_exist_after_init(self, tmp_path):
+    def test_all_expected_tables_exist_after_init(self, tmp_path):
         import db_schema  # noqa: PLC0415
         db_path = str(tmp_path / "test.db")
         db_schema.init(db_path)
@@ -342,6 +346,122 @@ class TestEmbeddingsColumns:
         cols = _get_column_names(conn, "embeddings")
         conn.close()
         assert "model_version" in cols
+
+
+# ---------------------------------------------------------------------------
+# goals columns
+# ---------------------------------------------------------------------------
+
+class TestGoalsColumns:
+    EXPECTED = {
+        "title",
+        "status",
+        "utility",
+        "deadline",
+        "constraints_json",
+        "success_criteria_json",
+        "risk_tier",
+        "autonomy_level_requested",
+        "autonomy_level_effective",
+        "owner_agent_id",
+        "run_id",
+        "idempotency_key",
+        "created_at",
+        "updated_at",
+    }
+
+    def test_goals_has_all_required_columns(self, tmp_path):
+        import db_schema  # noqa: PLC0415
+
+        db_path = str(tmp_path / "test.db")
+        db_schema.init(db_path)
+        conn = sqlite3.connect(db_path)
+        cols = _get_column_names(conn, "goals")
+        conn.close()
+        assert self.EXPECTED.issubset(cols)
+
+
+class TestGoalStatusHistoryColumns:
+    EXPECTED = {
+        "goal_id",
+        "old_status",
+        "new_status",
+        "changed_by_agent_id",
+        "reason",
+        "created_at",
+    }
+
+    def test_goal_status_history_has_all_required_columns(self, tmp_path):
+        import db_schema  # noqa: PLC0415
+
+        db_path = str(tmp_path / "test.db")
+        db_schema.init(db_path)
+        conn = sqlite3.connect(db_path)
+        cols = _get_column_names(conn, "goal_status_history")
+        conn.close()
+        assert self.EXPECTED.issubset(cols)
+
+
+# ---------------------------------------------------------------------------
+# action_logs columns
+# ---------------------------------------------------------------------------
+
+class TestActionLogsColumns:
+    EXPECTED = {
+        "goal_id",
+        "parent_action_id",
+        "action_type",
+        "tool_name",
+        "mode",
+        "status",
+        "input_summary",
+        "expected_result",
+        "observed_result",
+        "rollback_action_id",
+        "owner_agent_id",
+        "run_id",
+        "idempotency_key",
+        "created_at",
+        "completed_at",
+    }
+
+    def test_action_logs_has_all_required_columns(self, tmp_path):
+        import db_schema  # noqa: PLC0415
+
+        db_path = str(tmp_path / "test.db")
+        db_schema.init(db_path)
+        conn = sqlite3.connect(db_path)
+        cols = _get_column_names(conn, "action_logs")
+        conn.close()
+        assert self.EXPECTED.issubset(cols)
+
+
+class TestAutonomyCheckpointColumns:
+    EXPECTED = {
+        "goal_id",
+        "action_id",
+        "requested_level",
+        "approved_level",
+        "verdict",
+        "rationale",
+        "stop_conditions_json",
+        "rollback_required",
+        "reviewer_type",
+        "owner_agent_id",
+        "run_id",
+        "idempotency_key",
+        "created_at",
+    }
+
+    def test_autonomy_checkpoints_has_all_required_columns(self, tmp_path):
+        import db_schema  # noqa: PLC0415
+
+        db_path = str(tmp_path / "test.db")
+        db_schema.init(db_path)
+        conn = sqlite3.connect(db_path)
+        cols = _get_column_names(conn, "autonomy_checkpoints")
+        conn.close()
+        assert self.EXPECTED.issubset(cols)
 
 
 # ---------------------------------------------------------------------------

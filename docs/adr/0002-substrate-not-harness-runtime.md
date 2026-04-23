@@ -66,5 +66,5 @@ Claude's decisions and actions durable and queryable across sessions.
 
 Additions to the service should be durable record surfaces with explicit
 justification — not runtime orchestration logic. The goal/action-log/
-autonomy-checkpoint bridge primitives are the current example of this
-pattern done correctly.
+autonomy-checkpoint agent operation surfaces are the current example of
+this pattern done correctly.

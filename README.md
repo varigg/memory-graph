@@ -18,10 +18,9 @@ Use these documents as the canonical reading path for the project:
 - `docs/phase3-consolidated.md` — consolidated retrospective summary of Phase 3 implementation and rationale
 - `docs/plans/README.md` — active implementation plans and plan lifecycle rules
 - `docs/agent-memory-ops.md` — restart-safe autonomous-agent operating conventions for this service
-- `harness.md` — target autonomous-agent harness vision that this backend is intended to support over time
 - `.github/copilot-instructions.md` — Copilot-specific session continuity and shared-memory usage hints for this repo
 
-If you want the shortest end-to-end overview, read this file first, then `docs/architecture.md`, then `docs/deep-dive/README.md`, then `docs/adr/README.md`, then `docs/roadmap.md`, then `docs/conversation-outcomes.md`, then `docs/phase1-2-consolidated.md`, then `docs/phase3-consolidated.md`, then `docs/agent-memory-ops.md`, and finally `harness.md`.
+If you want the shortest end-to-end overview, read this file first, then `docs/architecture.md`, then `docs/vision.md`, then `docs/deep-dive/README.md`, then `docs/adr/README.md`, then `docs/roadmap.md`, then `docs/conversation-outcomes.md`, then `docs/phase1-2-consolidated.md`, then `docs/phase3-consolidated.md`, and `docs/agent-memory-ops.md`.
 
 ## Quick Start
 
@@ -252,6 +251,58 @@ Stale private cleanup behavior:
   deterministic deletion summary
 - optional `owner_agent_id` narrows cleanup to one owner's private memories
 
+### Goals + Action Logs + Autonomy Checks (Agent Operation Surfaces)
+
+- `POST /goal`
+  - Body: `title` (required), `owner_agent_id` (required)
+  - Optional: `status` (`active|blocked|completed|abandoned`), `utility`,
+    `deadline`, `constraints` (JSON object), `success_criteria` (JSON object),
+    `risk_tier` (`low|medium|high|critical`), `autonomy_level_requested`,
+    `autonomy_level_effective`, `run_id`, `idempotency_key`
+  - Response: `201 {"id": <int>}`; idempotent replay returns `200` with
+    `{"id": <int>, "idempotent_replay": true}`
+- `GET /goal/<id>`
+- `GET /goal/list?limit=<int>&offset=<int>&owner_agent_id=<id>&status=<status>&run_id=<id>`
+- `POST /goal/<id>/status`
+  - Body: `owner_agent_id` (required), `status` (required), `reason` (optional)
+
+Bridge response-shape note for goals:
+
+- `GET /goal/<id>` and `GET /goal/list` include parsed `constraints` and
+  `success_criteria` objects for read/write symmetry
+- raw `constraints_json` and `success_criteria_json` fields remain in responses
+  for backward compatibility
+
+- `POST /action-log`
+  - Body: `goal_id` (required), `action_type` (required), `mode` (required),
+    `status` (required), `owner_agent_id` (required)
+  - Optional: `parent_action_id`, `tool_name`, `input_summary`,
+    `expected_result`, `observed_result`, `rollback_action_id`, `run_id`,
+    `idempotency_key`
+  - Response: `201 {"id": <int>}`; idempotent replay returns `200` with
+    `{"id": <int>, "idempotent_replay": true}`
+- `GET /action-log/list?limit=<int>&offset=<int>&owner_agent_id=<id>&goal_id=<id>&status=<status>&run_id=<id>`
+- `POST /action-log/<id>/complete`
+  - Body: `owner_agent_id` (required),
+    `status` (`succeeded|failed|rolled_back`),
+    `observed_result` (optional), `rollback_action_id` (optional)
+
+- `POST /autonomy/check`
+  - Body: `requested_level` (required int), `approved_level` (required int),
+    `verdict` (`approved|denied|sandbox_only`), `owner_agent_id` (required)
+  - Optional: `goal_id`, `action_id`, `rationale`,
+    `stop_conditions` (JSON object), `rollback_required` (bool),
+    `reviewer_type` (`policy|human|system`, default `system`),
+    `run_id`, `idempotency_key`
+  - Response: `201 {"id": <int>}`; idempotent replay returns `200` with
+    `{"id": <int>, "idempotent_replay": true}`
+- `GET /autonomy/check/list?limit=<int>&offset=<int>&owner_agent_id=<id>&goal_id=<id>&action_id=<id>&verdict=<v>&reviewer_type=<t>&run_id=<id>`
+
+Bridge response-shape note for autonomy checkpoints:
+
+- `GET /autonomy/check/list` includes parsed `stop_conditions` object in
+  addition to `stop_conditions_json`
+
 ### Entities
 
 - `POST /entity`
@@ -399,7 +450,7 @@ See:
 - `docs/deep-dive/retrieval-contracts.md`
 - `docs/deep-dive/operations-and-maintenance.md`
 - `docs/agent-memory-ops.md` (autonomous-agent operational usage and restart guide)
-- `harness.md` (target harness design this service is expected to support)
+- `docs/vision.md` (overall system vision including planned future surfaces)
 
 ## Testing
 
@@ -411,7 +462,7 @@ uv run pytest -q --tb=no
 
 Current status:
 
-- `434 passed, 14 skipped`
+- `454 passed, 14 skipped`
 
 ## Project Layout
 
@@ -422,7 +473,6 @@ memory-graph/
 ├── db_schema.py
 ├── db_utils.py
 ├── embeddings.py
-├── harness.md
 ├── pyproject.toml
 ├── requirements.txt
 ├── blueprints/
