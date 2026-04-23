@@ -21,6 +21,13 @@ operate without blocking on tool-use approval prompts. This is required for
 unattended 24/7 operation — a session that halts waiting for permission
 confirmation is not autonomous.
 
+**Safety note:** `--dangerously-skip-permissions` is not a generally safe
+default. Run Claude Code as a dedicated least-privileged user, provide only
+narrowly scoped credentials for the specific services it must reach, and
+isolate filesystem and network access to what autonomous operation actually
+requires. Treat the runtime as capable of taking unintended actions if given
+malicious or compromised input, and monitor accordingly.
+
 The session is the planner, the decision-maker, and the executor. Memory
 Graph is where it externalizes state that must survive beyond a single
 session.
@@ -30,8 +37,10 @@ session.
 `CLAUDE.md` is the invariant startup specification. On every session start it
 instructs Claude to:
 
-1. Query the memory API for the last session snapshot (scoped by `run_id`)
-   to recover working context
+1. Query the memory API for the most recent `session_snapshot` memory
+   (filtered by `owner_agent_id=autonomous` and `tags=snapshot`) to recover
+   working context. The `SessionStart` hook handles this automatically; the
+   model only needs to act on it if the hook is not configured.
 2. List running cron jobs and reconcile against the canonical specs in
    `~/.claude/prompts/` — recreating any that are missing
 3. Resume any open goals recorded in the service from the previous session
@@ -346,8 +355,8 @@ Two endpoints support the Crons dashboard tab and bootstrap reconciliation:
   Called at session start after all crons are created so the dashboard can
   show live countdowns.
 - **`GET /cron/active`** — returns the current snapshot.
-- **`GET /cron/prompts`** — parses `~/.claude/cron-prompts.md` (where
-  cron prompt files persist across restarts) into labeled sections.
+- **`GET /cron/prompts`** — parses `~/.claude/prompts/` (the directory of
+  cron prompt files that persist across restarts) into labeled sections.
 
 ### Autonomy levels
 

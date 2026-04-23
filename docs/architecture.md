@@ -65,9 +65,9 @@ Flask blueprints provide the HTTP surface for:
 
 - conversations
 - memory CRUD and lifecycle
-- goals, action logs, and autonomy checkpoints
 - search and embeddings
 - KV and utility endpoints
+- goals, action logs, and autonomy checkpoints (bridge primitives — in progress, pending M4 merge)
 
 These handlers are intentionally thin transport adapters. Shared request
 parsing lives in `blueprints/_params.py`. Lifecycle, retrieval, write
@@ -79,12 +79,10 @@ SQLite is the source of truth for:
 
 - conversations
 - memories and memory relations
-- goals and goal status history
-- action logs
-- autonomy checkpoints
 - entities
 - embeddings
 - key-value state
+- goals, goal status history, action logs, and autonomy checkpoints (bridge primitives — in progress, pending M4 merge)
 
 FTS5 and embedding-based retrieval are both implemented on top of this local
 store. Repository modules under `storage/` own SQL construction, row mapping,

@@ -180,6 +180,8 @@ stats from any other machines if applicable.
 ```
 You are running as the reflection cron (every 12h at 11:27 and 23:27).
 
+Note: this cron requires /reflection, /insight, and /worldmodel which are planned surfaces. Check availability: if `curl -sf http://127.0.0.1:7777/reflection/recent` returns 404, exit without writing anything.
+
 1. Fetch recent conversations: GET /conversation/recent?limit=50
 2. Identify patterns, recurring mistakes, and actionable insights.
 3. Save a reflection: POST /reflection with {content, patterns,
@@ -197,6 +199,8 @@ Do not send a Discord message unless there is something urgent to flag.
 
 ```
 You are running as the preference learning cron (daily at 3:07).
+
+Note: this cron requires /preference and /proposal which are planned surfaces. Check availability: if `curl -sf http://127.0.0.1:7777/preference/active` returns 404, exit without writing anything.
 
 1. Fetch recent conversations: GET /conversation/recent?limit=100
 2. Identify feedback signals — corrections, expressions of preference,
@@ -268,6 +272,8 @@ You are running as the goal prioritizer (daily at 9:37).
 ```
 You are running as the memory decay cron (Sundays at 5:17).
 
+Note: this cron requires POST /memory/decay which is a planned surface. Check availability: if the endpoint returns 404, exit without writing anything.
+
 Apply confidence decay to memories, entities, and world model rows
 that have not been verified recently:
 
@@ -287,6 +293,8 @@ Do not send a Discord message.
 
 ```
 You are running as the daily metrics cron (daily at 22:23).
+
+Note: this cron requires /metric, /verify, and /wm/* which are planned surfaces. Check availability: if `curl -sf http://127.0.0.1:7777/metric/summary` returns 404, exit without writing anything.
 
 Compute and record today's KPIs:
 
@@ -314,6 +322,8 @@ threshold (e.g. hallucination_rate > 0.2).
 ```
 You are running as the predictions resolver (daily at 21:53).
 
+Note: this cron requires /wm/prediction which is a planned surface. Check availability: if `curl -sf http://127.0.0.1:7777/wm/prediction/list` returns 404, exit without writing anything.
+
 1. Fetch unresolved predictions past their due date:
    GET /wm/prediction/list?resolved=false
    Filter for due_at < now.
@@ -331,6 +341,8 @@ when evidence is genuinely unclear.
 
 ```
 You are running as the skill promotion cron (daily at 2:37).
+
+Note: this cron requires /skill which is a planned surface. Check availability: if `curl -sf http://127.0.0.1:7777/skill/list` returns 404, exit without writing anything.
 
 Fetch all skills: GET /skill/list
 
@@ -350,6 +362,8 @@ visibility=private.
 
 ```
 You are running as the experiments runner (every 6h at :17).
+
+Note: this cron requires /experiment and /sandbox which are planned surfaces. Check availability: if `curl -sf http://127.0.0.1:7777/experiment/list` returns 404, exit without writing anything.
 
 1. Fetch running experiments: GET /experiment/list
    Filter for status=running and total observations < min_samples.
@@ -372,6 +386,8 @@ clear winner.
 ```
 You are running as the world model grower (daily at 6:53).
 
+Note: this cron requires /worldmodel which is a planned surface. Check availability: if `curl -sf http://127.0.0.1:7777/worldmodel/active` returns 404, exit without writing anything.
+
 1. Fetch recent conversations: GET /conversation/recent?hours=24
 2. Scan for entities (people, projects, places) and topics mentioned
    2 or more times.
@@ -390,6 +406,8 @@ Do not send a Discord message.
 
 ```
 You are running as the auto-audit cron (3x/day at 8:19, 14:19, 20:19).
+
+Note: this cron requires /reflection, /capability, and /proposal which are planned surfaces. Omit checks for any endpoint that returns 404; only audit surfaces that are available.
 
 Integrity scan — check for each of the following:
 
@@ -418,7 +436,7 @@ review queue.
 ls ~/.claude/prompts/
 ```
 
-Expected: 15 files (cron-02 through cron-18, excluding 01, 03, 08).
+Expected: 15 files (cron-02 through cron-18, excluding 01, 03, 08). 6 of these run against currently implemented endpoints; the remaining 9 reference planned surfaces and will no-op gracefully until those endpoints are available.
 
 ---
 
@@ -439,7 +457,7 @@ On session start, the CLAUDE.md startup procedure will:
 4. Sync the cron snapshot via `POST /cron/active`
 5. Resume open goals
 
-Confirm all 15 cron jobs are active before considering the system live.
+Confirm all 15 cron jobs are registered. 6 will execute against implemented endpoints today; the other 9 will no-op until their planned surfaces are built.
 
 ---
 
@@ -453,7 +471,7 @@ curl -s http://127.0.0.1:7777/health
 
 # Cron snapshot populated?
 curl -s http://127.0.0.1:7777/cron/active | jq '.crons | length'
-# Expected: 15
+# Expected: 15 (6 active today, 9 no-op until planned surfaces are built)
 
 # Memory write works?
 curl -s -X POST http://127.0.0.1:7777/memory \

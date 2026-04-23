@@ -120,10 +120,11 @@ Every write must include:
 
 ---
 
-## Goals and Plans
+## Goals
 
 Before any task with a clear deliverable or more than ~3 tool calls,
-record a goal and an initial plan.
+record a goal. Plan nodes (`POST /plan`) are a planned surface not yet
+implemented — use goals and action logs for task tracking today.
 
 ```bash
 # Create goal
@@ -136,19 +137,10 @@ GOAL_ID=$(curl -s -X POST http://127.0.0.1:7777/goal \
         '{title:$title, owner_agent_id:$owner, run_id:$run,
           success_criteria:{}, risk_tier:"low"}')" \
   | jq -r '.id')
-
-# Create plan with root node
-curl -s -X POST http://127.0.0.1:7777/plan \
-  -H "Content-Type: application/json" \
-  -d "$(jq -n \
-        --arg gid "$GOAL_ID" \
-        --arg title "..." \
-        --arg expected "..." \
-        '{goal_id:$gid, title:$title, expected_result:$expected}')"
 ```
 
-Update node status as work progresses (`pending` → `running` →
-`success` / `failed`). On completion:
+Track progress by logging action entries (see Action Logs below).
+On completion:
 
 ```bash
 curl -s -X POST "http://127.0.0.1:7777/goal/$GOAL_ID/status" \
