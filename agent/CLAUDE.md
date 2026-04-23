@@ -12,34 +12,19 @@ Full API reference: `~/code/memory-graph/README.md`
 
 ## Session Startup
 
-On every session start, perform these steps automatically before
-responding to any messages:
+Service health and operational context (open goals, last session
+snapshot) are injected automatically by the `SessionStart` hook before
+this session begins. You do not need to query for them — they are
+already in your context above under "Session Context".
 
-1. **Verify service health**
+On every session start, perform these remaining steps before responding
+to any messages:
 
-   ```bash
-   curl -s http://127.0.0.1:7777/health
-   ```
-
-   If the response is not `{"status":"ok",...}`, start the service:
-
-   ```bash
-   cd ~/code/memory-graph && uv run python api_server.py &
-   sleep 2 && curl -s http://127.0.0.1:7777/health
-   ```
-
-2. **Recover working context** — recall the last session snapshot to
-   restore open tasks and recent decisions:
-
-   ```bash
-   curl -s 'http://127.0.0.1:7777/memory/recall?topic=session_snapshot&profile=autonomous'
-   ```
-
-3. **Reconcile cron jobs** — list running crons and compare against
+1. **Reconcile cron jobs** — list running crons and compare against
    `~/.claude/prompts/`. Recreate any missing crons using CronCreate
    with the content of the corresponding prompt file.
 
-4. **Sync cron snapshot**
+2. **Sync cron snapshot**
 
    ```bash
    curl -s -X POST http://127.0.0.1:7777/cron/active \
@@ -47,13 +32,8 @@ responding to any messages:
      -d '{"crons": [<current job list>]}'
    ```
 
-5. **Resume open goals**
-
-   ```bash
-   curl -s http://127.0.0.1:7777/goal/active
-   ```
-
-   Continue any in-progress work from the previous session.
+3. **Resume open goals** — the active goals list is in your injected
+   context. Continue any in-progress work from the previous session.
 
 ---
 

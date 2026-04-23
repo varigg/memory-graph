@@ -52,7 +52,76 @@ head -5 ~/.claude/CLAUDE.md
 
 ---
 
-## STEP 3: Write Cron Prompt Files
+## STEP 3: Install Hooks
+
+Three Claude Code hooks handle session continuity at the shell level,
+independent of model behaviour:
+
+- **`SessionStart`** — starts the service if needed, injects open goals
+  and last snapshot as `additionalContext` so every session begins with
+  full operational awareness automatically.
+- **`PreCompact`** — writes a state snapshot to memory-graph before
+  context compaction so post-compaction sessions can recover.
+- **`SessionEnd`** — writes a final snapshot on controlled shutdown.
+
+Make the hook scripts executable:
+
+```bash
+chmod +x ~/code/memory-graph/agent/hooks/session-start.sh
+chmod +x ~/code/memory-graph/agent/hooks/pre-compact.sh
+chmod +x ~/code/memory-graph/agent/hooks/session-end.sh
+```
+
+Register them in `~/.claude/settings.json`. If the file does not exist,
+create it; if it already has a `hooks` key, merge carefully:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/code/memory-graph/agent/hooks/session-start.sh"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/code/memory-graph/agent/hooks/pre-compact.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/code/memory-graph/agent/hooks/session-end.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Verify the hooks are registered:
+
+```bash
+cat ~/.claude/settings.json | jq '.hooks | keys'
+# Expected: ["PreCompact", "SessionEnd", "SessionStart"]
+```
+
+---
+
+## STEP 4: Write Cron Prompt Files
 
 Write each file below to `~/.claude/prompts/`. These files are the
 canonical cron specifications; the heartbeat cron recreates any missing
@@ -343,7 +412,7 @@ review queue.
 
 ---
 
-## STEP 4: Verify Prompt Files
+## STEP 5: Verify Prompt Files
 
 ```bash
 ls ~/.claude/prompts/
@@ -353,7 +422,7 @@ Expected: 15 files (cron-02 through cron-18, excluding 01, 03, 08).
 
 ---
 
-## STEP 5: Launch
+## STEP 6: Launch
 
 Start the autonomous agent session:
 
@@ -374,7 +443,7 @@ Confirm all 15 cron jobs are active before considering the system live.
 
 ---
 
-## STEP 6: Smoke Test
+## STEP 7: Smoke Test
 
 Run these checks after the first session establishes:
 
